@@ -2,6 +2,7 @@
 
 # Hardhat config that might sneak through
 node_modules/
+cache/
 hardhat.config.js
 package-lock.json
 package.json

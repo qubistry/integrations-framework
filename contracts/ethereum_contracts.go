@@ -3,6 +3,7 @@ package contracts
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"integrations-framework/client"
 	"integrations-framework/contracts/ethereum"
 	"math/big"
@@ -96,7 +97,7 @@ type EthereumLinkToken struct {
 	client       *client.EthereumClient
 	linkToken    *ethereum.LinkToken
 	callerWallet client.BlockchainWallet
-	address      common.Address
+	address      *common.Address
 }
 
 // Fund the LINK Token contract with ETH to distribute the token
@@ -357,25 +358,118 @@ func (e *EthereumStorage) Get(ctxt context.Context) (*big.Int, error) {
 	return e.store.Get(opts)
 }
 
-// EthereumVRF represents a VRF contract
-type EthereumVRF struct {
-	client       *client.EthereumClient
-	vrf          *ethereum.VRF
-	callerWallet client.BlockchainWallet
+// EthereumVRFCoordinator represents the VRF Coordinator contract
+type EthereumVRFCoordinator struct {
 	address      *common.Address
+	client       *client.EthereumClient
+	coordinator  *ethereum.VRFCoordinator
+	callerWallet client.BlockchainWallet
 }
 
-// Fund sends specified currencies to the contract
-func (v *EthereumVRF) Fund(fromWallet client.BlockchainWallet, ethAmount, linkAmount *big.Int) error {
-	return v.client.Fund(fromWallet, v.address.Hex(), ethAmount, linkAmount)
+// Fund sends specified eth and link to the contract
+func (e *EthereumVRFCoordinator) Fund(fromWallet client.BlockchainWallet, ethAmount, linkAmount *big.Int) error {
+	return e.client.Fund(fromWallet, e.address.Hex(), ethAmount, linkAmount)
 }
 
-// ProofLength returns the PROOFLENGTH call from the VRF contract
-func (v *EthereumVRF) ProofLength(ctxt context.Context) (*big.Int, error) {
+// Address returns the address where the contract is deployed
+func (e *EthereumVRFCoordinator) Address() string {
+	return e.address.Hex()
+}
+
+func (e *EthereumVRFCoordinator) ProofLength(ctxt context.Context) (*big.Int, error) {
 	opts := &bind.CallOpts{
-		From:    common.HexToAddress(v.callerWallet.Address()),
+		From:    common.HexToAddress(e.callerWallet.Address()),
 		Pending: true,
 		Context: ctxt,
 	}
-	return v.vrf.PROOFLENGTH(opts)
+
+	return e.coordinator.PROOFLENGTH(opts)
+}
+
+// Registers a proving key with a chainlink node
+func (e *EthereumVRFCoordinator) RegisterProvingKey(
+	fromWallet client.BlockchainWallet,
+	linkAmount *big.Int,
+	chainlinkNode client.Chainlink,
+	publicProvingKey [2]*big.Int,
+	chainlinkJobId string,
+) error {
+	opts, err := e.client.TransactionOpts(fromWallet, *e.address, big.NewInt(0), nil)
+	if err != nil {
+		return err
+	}
+
+	// Get chainlink address
+	ethKeys, err := chainlinkNode.ReadETHKeys()
+	if err != nil {
+		return err
+	}
+	if len(ethKeys.Data) < 1 {
+		return errors.New("Retrieved 0 ETH keys from the chainlink node")
+	}
+	primaryEthKey := common.HexToAddress(ethKeys.Data[0].Attributes.Address)
+
+	var jobId [32]byte
+	copy(jobId[:], []byte(chainlinkJobId))
+
+	tx, err := e.coordinator.RegisterProvingKey(opts, linkAmount, primaryEthKey, publicProvingKey, jobId)
+	if err != nil {
+		return err
+	}
+	return e.client.WaitForTransaction(tx.Hash())
+}
+
+// EthereumVRFConsumer represents the VRF consumer contract
+type EthereumVRFConsumer struct {
+	address      *common.Address
+	client       *client.EthereumClient
+	consumer     *ethereum.VRFConsumer
+	callerWallet client.BlockchainWallet
+}
+
+// Fund sends specified eth and link to the contract
+func (e *EthereumVRFConsumer) Fund(fromWallet client.BlockchainWallet, ethAmount, linkAmount *big.Int) error {
+	return e.client.Fund(fromWallet, e.address.Hex(), ethAmount, linkAmount)
+}
+
+// Address returns the address where the contract is deployed
+func (e *EthereumVRFConsumer) Address() string {
+	return e.address.Hex()
+}
+
+// RequestRandomness makes a request to the coordinator for randomness
+// keyHash ID of public key against which randomness is generated
+// fee The amount of LINK to send with the request
+// seed seed mixed into the input of the VRF. Mostly vestigal, can be null
+func (e *EthereumVRFConsumer) RequestRandomness(fromWallet client.BlockchainWallet, keyHash [32]byte, fee, seed *big.Int) error {
+	opts, err := e.client.TransactionOpts(fromWallet, *e.address, big.NewInt(0), nil)
+	if err != nil {
+		return err
+	}
+
+	tx, err := e.consumer.TestRequestRandomness(opts, keyHash, fee, seed)
+	if err != nil {
+		return err
+	}
+	return e.client.WaitForTransaction(tx.Hash())
+}
+
+// RequestId returns the unique ID for a request
+func (e *EthereumVRFConsumer) RequestId(ctxt context.Context) ([32]byte, error) {
+	opts := &bind.CallOpts{
+		From:    common.HexToAddress(e.callerWallet.Address()),
+		Pending: true,
+		Context: ctxt,
+	}
+	return e.consumer.RequestId(opts)
+}
+
+// RandomnessOutput retrieves the random number
+func (e *EthereumVRFConsumer) RandomnessOutput(ctxt context.Context) (*big.Int, error) {
+	opts := &bind.CallOpts{
+		From:    common.HexToAddress(e.callerWallet.Address()),
+		Pending: true,
+		Context: ctxt,
+	}
+	return e.consumer.RandomnessOutput(opts)
 }

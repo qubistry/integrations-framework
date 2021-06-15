@@ -25,7 +25,7 @@ type ContractDeployer interface {
 		fromWallet client.BlockchainWallet,
 		offchainOptions OffchainOptions,
 	) (OffchainAggregator, error)
-	DeployVRFContract(fromWallet client.BlockchainWallet) (VRF, error)
+	DeployVRFSuite(fromWallet client.BlockchainWallet) (VRFCoordinator, VRFConsumer, error)
 }
 
 // NewContractDeployer returns an instance of a contract deployer based on the client type
@@ -111,7 +111,7 @@ func (e *EthereumContractDeployer) DeployLinkTokenContract(fromWallet client.Blo
 		client:       e.eth,
 		linkToken:    instance.(*ethereum.LinkToken),
 		callerWallet: fromWallet,
-		address:      *linkTokenAddress,
+		address:      linkTokenAddress,
 	}, err
 }
 
@@ -202,20 +202,51 @@ func (e *EthereumContractDeployer) DeployStorageContract(fromWallet client.Block
 	}, err
 }
 
-func (e *EthereumContractDeployer) DeployVRFContract(fromWallet client.BlockchainWallet) (VRF, error) {
-	address, _, instance, err := e.eth.DeployContract(fromWallet, "VRF", func(
+// DeployVRFSuite deploys the VRF Coordinator, BlockHash store, and the Consumer
+func (e *EthereumContractDeployer) DeployVRFSuite(fromWallet client.BlockchainWallet) (VRFCoordinator, VRFConsumer, error) {
+	linkAddress := common.HexToAddress(e.eth.Network.Config().LinkTokenAddress)
+	// Deploy BlockHash Store
+	blockHashAddress, _, _, err := e.eth.DeployContract(fromWallet, "BlockHash Store", func(
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
-		return ethereum.DeployVRF(auth, backend)
+		return ethereum.DeployBlockhashStore(auth, backend)
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &EthereumVRF{
-		client:       e.eth,
-		vrf:          instance.(*ethereum.VRF),
-		callerWallet: fromWallet,
-		address:      address,
-	}, err
+
+	// Deploy Coordinator
+	coordinatorAddress, _, coordinatorInstance, err := e.eth.DeployContract(fromWallet, "VRF Coordinator", func(
+		auth *bind.TransactOpts,
+		backend bind.ContractBackend,
+	) (common.Address, *types.Transaction, interface{}, error) {
+		return ethereum.DeployVRFCoordinator(auth, backend, linkAddress, *blockHashAddress)
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Deploy Consumer
+	consumerAddress, _, consumerInstance, err := e.eth.DeployContract(fromWallet, "VRF Consumer", func(
+		auth *bind.TransactOpts,
+		backend bind.ContractBackend,
+	) (common.Address, *types.Transaction, interface{}, error) {
+		return ethereum.DeployVRFConsumer(auth, backend, linkAddress, *blockHashAddress)
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &EthereumVRFCoordinator{
+			address:      coordinatorAddress,
+			client:       e.eth,
+			coordinator:  coordinatorInstance.(*ethereum.VRFCoordinator),
+			callerWallet: fromWallet,
+		}, &EthereumVRFConsumer{
+			address:      consumerAddress,
+			client:       e.eth,
+			consumer:     consumerInstance.(*ethereum.VRFConsumer),
+			callerWallet: fromWallet,
+		}, err
 }

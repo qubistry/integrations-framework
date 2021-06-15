@@ -23,7 +23,7 @@ var _ = Describe("Chainlink Node", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 	})
 
-	DescribeTable("deploy and use basic functionality", func(
+	DescribeTable("deploy and read an OCR feed", func(
 		initFunc client.BlockchainNetworkInit,
 		ocrOptions OffchainOptions,
 	) {
@@ -151,6 +151,30 @@ var _ = Describe("Contracts", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 	})
 
+	DescribeTable("deploy and interact with the LINK contract", func(
+		initFunc client.BlockchainNetworkInit,
+		value *big.Int,
+	) {
+		// Setup Network
+		networkConfig, err := initFunc(conf)
+		Expect(err).ShouldNot(HaveOccurred())
+		client, err := client.NewBlockchainClient(networkConfig)
+		Expect(err).ShouldNot(HaveOccurred())
+		wallets, err := networkConfig.Wallets()
+		Expect(err).ShouldNot(HaveOccurred())
+		contractDeployer, err := NewContractDeployer(client)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Interact with contract
+		linkInstance, err := contractDeployer.DeployLinkTokenContract(wallets.Default())
+		Expect(err).ShouldNot(HaveOccurred())
+		name, err := linkInstance.Name(context.Background())
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(name).To(Equal("ChainLink Token"))
+	},
+		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, big.NewInt(5)),
+	)
+
 	DescribeTable("deploy and interact with the storage contract", func(
 		initFunc client.BlockchainNetworkInit,
 		value *big.Int,
@@ -191,13 +215,6 @@ var _ = Describe("Contracts", func() {
 		contractDeployer, err := NewContractDeployer(client)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// Deploy LINK contract
-		linkInstance, err := contractDeployer.DeployLinkTokenContract(wallets.Default())
-		Expect(err).ShouldNot(HaveOccurred())
-		name, err := linkInstance.Name(context.Background())
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(name).To(Equal("ChainLink Token"))
-
 		// Deploy FluxMonitor contract
 		fluxInstance, err := contractDeployer.DeployFluxAggregatorContract(wallets.Default(), fluxOptions)
 		Expect(err).ShouldNot(HaveOccurred())
@@ -226,18 +243,43 @@ var _ = Describe("Contracts", func() {
 		contractDeployer, err := NewContractDeployer(client)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// Deploy LINK contract
-		linkInstance, err := contractDeployer.DeployLinkTokenContract(wallets.Default())
-		Expect(err).ShouldNot(HaveOccurred())
-		name, err := linkInstance.Name(context.Background())
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(name).To(Equal("ChainLink Token"))
-
 		// Deploy Offchain contract
 		offChainInstance, err := contractDeployer.DeployOffChainAggregator(wallets.Default(), ocrOptions)
 		Expect(err).ShouldNot(HaveOccurred())
 		err = offChainInstance.Fund(wallets.Default(), nil, big.NewInt(50000000000))
 		Expect(err).ShouldNot(HaveOccurred())
+		ans, err := offChainInstance.GetLatestAnswer(context.Background())
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(ans).ShouldNot(BeNil())
+	},
+		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, DefaultOffChainAggregatorOptions()),
+	)
+
+	DescribeTable("deploy and interact with the VRF contract suite", func(
+		initFunc client.BlockchainNetworkInit,
+		ocrOptions OffchainOptions,
+	) {
+		// Setup network and client
+		networkConfig, err := initFunc(conf)
+		Expect(err).ShouldNot(HaveOccurred())
+		client, err := client.NewEthereumClient(networkConfig)
+		Expect(err).ShouldNot(HaveOccurred())
+		wallets, err := networkConfig.Wallets()
+		Expect(err).ShouldNot(HaveOccurred())
+		contractDeployer, err := NewContractDeployer(client)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Deploy VRF suite
+		coordinator, consumer, err := contractDeployer.DeployVRFSuite(wallets.Default())
+		Expect(err).ShouldNot(HaveOccurred())
+
+		length, err := coordinator.ProofLength(context.Background())
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(length).ShouldNot(BeNil())
+
+		id, err := consumer.RequestId(context.Background())
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(id).ShouldNot(BeNil())
 	},
 		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, DefaultOffChainAggregatorOptions()),
 	)

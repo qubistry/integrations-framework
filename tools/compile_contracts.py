@@ -6,11 +6,18 @@ import shutil
 
 # A proof of concept / convenient script to quickly compile contracts and their go bindings
 
-solc_versions = ["v0.4", "v0.6", "v0.7"]
+solc_versions = ["v0.4", "v0.6", "v0.7", "v0.8"]
 rootdir = "./artifacts/contracts/ethereum/"
 targetdir = "./contracts/ethereum"
 
-used_contract_names = ["FluxAggregator", "VRF", "OffchainAggregator", "LinkToken"]
+used_contract_names = [
+    "FluxAggregator", 
+    "OffchainAggregator", 
+    "LinkToken", 
+    "BlockhashStore",
+    "VRFCoordinator",
+    "VRFConsumer"
+]
 
 print("Locally installing hardhat...")
 subprocess.run('npm install --save-dev hardhat', shell=True, check=True)
@@ -86,7 +93,6 @@ for version in solc_versions:
     for subdir, dirs, files in os.walk(rootdir + version):
         for f in files:
             if ".dbg." not in f:
-                print(f)
                 compile_contract = open(subdir + "/" + f, "r")
                 data = json.load(compile_contract)
                 contract_name = data["contractName"]
@@ -102,6 +108,7 @@ for version in solc_versions:
                 bin_file.close()
 
                 if contract_name in used_contract_names:
+                    print("Generating Go code for " + contract_name)
                     subprocess.run("abigen --bin=" + bin_name + " --abi=" + abi_name + " --pkg=" + contract_name + " --out=" + 
                     targetdir + "/" + contract_name + ".go", shell=True, check=True)
             
@@ -121,3 +128,4 @@ if path.exists("cache/"):
     shutil.rmtree("cache/")
 
 print("Done!")
+print("You still need to change some package names in the generated Go files!!!")

@@ -94,6 +94,11 @@ type OffChainAggregatorBootstrapSpec struct {
 	P2PId           string // This node's P2P ID
 }
 
+type VRFSpec struct {
+	PublicKey          string // Shared public key
+	CoordinatorAddress string // Address of the coordinator contract
+}
+
 func TemplatizeOCRJobSpec(spec OffChainAggregatorSpec) (string, error) {
 	ocrJobSpecTemplateString := `type = "offchainreporting"
 schemaVersion = 1
@@ -176,9 +181,44 @@ type Storage interface {
 	Set(*big.Int) error
 }
 
-type VRF interface {
+func TemplatizeVRFSpec(spec VRFSpec) (string, error) {
+	ocrBootstrapSpecTemplateString := `type = "vrf"
+schemaVersion = 1
+name = "vrf-primary"
+coordinatorAddress = "{{.CoordinatorAddress}}"
+publicKey = "{{.PublicKey}}"
+confirmations = 6`
+	var buf bytes.Buffer
+	tmpl, err := template.New("VRF Spec Template").Parse(ocrBootstrapSpecTemplateString)
+	if err != nil {
+		return "", err
+	}
+	err = tmpl.Execute(&buf, spec)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), err
+}
+
+type VRFCoordinator interface {
+	Address() string
 	Fund(client.BlockchainWallet, *big.Int, *big.Int) error
-	ProofLength(context.Context) (*big.Int, error)
+	RegisterProvingKey(
+		fromWallet client.BlockchainWallet,
+		linkAmount *big.Int,
+		chainlinkNode client.Chainlink,
+		publicProvingKey [2]*big.Int,
+		chainlinkJobId string,
+	) error
+	ProofLength(ctxt context.Context) (*big.Int, error)
+}
+
+type VRFConsumer interface {
+	Address() string
+	Fund(client.BlockchainWallet, *big.Int, *big.Int) error
+	RequestRandomness(fromWallet client.BlockchainWallet, keyHash [32]byte, fee, seed *big.Int) error
+	RequestId(ctxt context.Context) ([32]byte, error)
+	RandomnessOutput(ctxt context.Context) (*big.Int, error)
 }
 
 type RoundData struct {
