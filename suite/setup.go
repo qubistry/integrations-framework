@@ -121,3 +121,7 @@ func ConnectToTemplateNodes() ([]client.Chainlink, []common.Address, error) {
 
 	return cls, clsAddresses, nil
 }
+
+func DeployFluxVolume() {
+
+}

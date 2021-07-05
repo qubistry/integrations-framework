@@ -2,6 +2,7 @@ package suite
 
 import (
 	"context"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -16,8 +17,70 @@ import (
 	"time"
 )
 
+type VolumeSpec struct {
+	Jobs                        int
+	ObservedValueChangeInterval time.Duration
+	NodePollTimePeriod          time.Duration
+	InitFunc                    client.BlockchainNetworkInit
+	FluxOptions                 contracts.FluxAggregatorOptions
+}
+
+func DeployVolumeFlux(spec *VolumeSpec) {
+	s, err := suite.DefaultLocalSetup(spec.InitFunc)
+	Expect(err).ShouldNot(HaveOccurred())
+	fluxInstance, err := s.Deployer.DeployFluxAggregatorContract(s.Wallets.Default(), spec.FluxOptions)
+	Expect(err).ShouldNot(HaveOccurred())
+	err = fluxInstance.Fund(s.Wallets.Default(), big.NewInt(0), big.NewInt(1e18))
+	Expect(err).ShouldNot(HaveOccurred())
+	err = fluxInstance.UpdateAvailableFunds(context.Background(), s.Wallets.Default())
+	Expect(err).ShouldNot(HaveOccurred())
+	clNodes, nodeAddrs, err := suite.ConnectToTemplateNodes()
+	oraclesAtTest := nodeAddrs[:3]
+	clNodesAtTest := clNodes[:3]
+	Expect(err).ShouldNot(HaveOccurred())
+	err = suite.FundTemplateNodes(s.Client, s.Wallets, clNodes, 2e18, 0)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	// set oracles and submissions
+	err = fluxInstance.SetOracles(s.Wallets.Default(),
+		contracts.SetOraclesOptions{
+			AddList:            oraclesAtTest,
+			RemoveList:         []common.Address{},
+			AdminList:          oraclesAtTest,
+			MinSubmissions:     3,
+			MaxSubmissions:     3,
+			RestartDelayRounds: 0,
+		})
+	Expect(err).ShouldNot(HaveOccurred())
+	oracles, err := fluxInstance.GetOracles(context.Background())
+	Expect(err).ShouldNot(HaveOccurred())
+	log.Info().Str("Oracles", strings.Join(oracles, ",")).Msg("oracles set")
+	adapter := tools.NewExternalAdapter()
+	for i := 0; i < spec.Jobs; i++ {
+		for _, n := range clNodesAtTest {
+			fluxSpec := &client.FluxMonitorJobSpec{
+				Name:              fmt.Sprintf("flux_monitor_%d", i),
+				ContractAddress:   fluxInstance.Address(),
+				PollTimerPeriod:   spec.NodePollTimePeriod,
+				PollTimerDisabled: false,
+				ObservationSource: client.ObservationSourceSpec(adapter.InsideDockerAddr + "/variable"),
+			}
+			_, err = n.CreateJob(fluxSpec)
+			Expect(err).ShouldNot(HaveOccurred())
+		}
+	}
+	go func() {
+		for {
+			_, _ = tools.SetVariableMockData(adapter.LocalAddr, 5)
+			time.Sleep(spec.ObservedValueChangeInterval)
+			_, _ = tools.SetVariableMockData(adapter.LocalAddr, 6)
+			time.Sleep(spec.ObservedValueChangeInterval)
+		}
+	}()
+}
+
 var _ = Describe("Flux monitor suite", func() {
-	FDescribeTable("Answering to deviation in rounds", func(
+	DescribeTable("Answering to deviation in rounds", func(
 		initFunc client.BlockchainNetworkInit,
 		fluxOptions contracts.FluxAggregatorOptions,
 	) {
@@ -109,66 +172,15 @@ var _ = Describe("Flux monitor suite", func() {
 		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
 	)
 
-	DescribeTable("Check removing/adding oracles, check new rounds is correct", func(
-		initFunc client.BlockchainNetworkInit,
-		fluxOptions contracts.FluxAggregatorOptions,
-	) {
-		// TODO
-	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
-	)
-
-	DescribeTable("Check oracle cooldown when add", func(
-		initFunc client.BlockchainNetworkInit,
-		fluxOptions contracts.FluxAggregatorOptions,
-	) {
-		// TODO
-	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
-	)
-
-	DescribeTable("Adapter went offline, come online, round data received in suggested round", func(
-		initFunc client.BlockchainNetworkInit,
-		fluxOptions contracts.FluxAggregatorOptions,
-	) {
-		// TODO
-	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
-	)
-
-	DescribeTable("Different sources, only one have flux", func(
-		initFunc client.BlockchainNetworkInit,
-		fluxOptions contracts.FluxAggregatorOptions,
-	) {
-		// TODO
-	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
-	)
-
-	DescribeTable("Bridge source", func(
-		initFunc client.BlockchainNetworkInit,
-		fluxOptions contracts.FluxAggregatorOptions,
-	) {
-		// TODO
-	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
-	)
-
-	DescribeTable("Check withdrawal with respect to RESERVE_ROUNDS", func(
-		initFunc client.BlockchainNetworkInit,
-		fluxOptions contracts.FluxAggregatorOptions,
-	) {
-		// TODO
-	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
-	)
-
-	DescribeTable("Person other than oracles starting a round", func(
-		initFunc client.BlockchainNetworkInit,
-		fluxOptions contracts.FluxAggregatorOptions,
-	) {
-		// TODO
-	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
-	)
+	// using only one sample, for nice report
+	Measure("Should run N flux monitors and check completion time and resources usage", func(b Benchmarker) {
+		DeployVolumeFlux(&VolumeSpec{
+			Jobs:                        3,
+			ObservedValueChangeInterval: 5 * time.Second,
+			NodePollTimePeriod:          15 * time.Second,
+			InitFunc:                    client.NewHardhatNetwork,
+			FluxOptions:                 contracts.DefaultFluxAggregatorOptions(),
+		})
+		b.RecordValue("runtime result", 12)
+	}, 1)
 })
