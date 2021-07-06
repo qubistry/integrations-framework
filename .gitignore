@@ -25,3 +25,6 @@ artifacts/
 
 # JUnit Test Reports
 junit.xml
+
+## prometheus scraped data
+scripts/local_prometheus/data

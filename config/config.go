@@ -21,6 +21,7 @@ const (
 type Config struct {
 	Networks        map[string]*NetworkConfig `mapstructure:"networks" yaml:"networks"`
 	Retry           *RetryConfig              `mapstructure:"retry" yaml:"retry"`
+	Prometheus      *PrometheusClientConfig   `mapstructure:"prometheus" yaml:"prometheus"`
 	DefaultKeyStore string
 }
 
@@ -122,4 +123,13 @@ func (s *SecretStore) Fetch() ([]string, error) {
 type RetryConfig struct {
 	Attempts    uint          `mapstructure:"attempts" yaml:"attempts"`
 	LinearDelay time.Duration `mapstructure:"linear_delay" yaml:"linear_delay"`
+}
+
+type PrometheusClientConfig struct {
+	Url string `mapstructure:"url" yaml:"url"`
+	// ScrapeJobName label for particular test scraping job
+	ScrapeJobName string `mapstructure:"scrape_job_name" yaml:"scrape_job_name"`
+	// TestAggregationInterval window in which test is performed, may be set during testing
+	TestAggregationInterval string        `mapstructure:"test_aggregation_interval" yaml:"test_aggregation_interval"`
+	QueryTimeout            time.Duration `mapstructure:"query_timeout" yaml:"query_timeout"`
 }

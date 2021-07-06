@@ -62,6 +62,22 @@ func NewExternalAdapter() ExternalAdapter {
 	}
 }
 
+func (e *ExternalAdapter) TriggerValueChange(i int) error {
+	if i%2 == 0 {
+		_, err := SetVariableMockData(e.LocalAddr, 5)
+		if err != nil {
+			return err
+		}
+		return nil
+	} else {
+		_, err := SetVariableMockData(e.LocalAddr, 6)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func SetVariableMockData(url string, data int) (*http.Response, error) {
 	resp, err := http.Post(
 		fmt.Sprintf("%s/set_variable?var=%d", url, data),

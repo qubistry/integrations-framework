@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sync"
 	"time"
 
 	ethContracts "github.com/smartcontractkit/integrations-framework/contracts/ethereum"

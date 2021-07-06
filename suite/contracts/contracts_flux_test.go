@@ -17,7 +17,7 @@ import (
 )
 
 var _ = Describe("Flux monitor suite", func() {
-	FDescribeTable("Answering to deviation in rounds", func(
+	DescribeTable("Answering to deviation in rounds", func(
 		initFunc client.BlockchainNetworkInit,
 		fluxOptions contracts.FluxAggregatorOptions,
 	) {

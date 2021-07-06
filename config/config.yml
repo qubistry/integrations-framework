@@ -27,7 +27,7 @@ networks:
             - 689af8efa8c651a91ad287602527f3af2fe9f6501a7ac4b061667b5a93e037fd
             - de9be858da4a475276426320d5e9262ecfc3ba460bfac56360bfa6c4c28b4ee0
             - df57089febbacf7ba0bc227dafbffa9fc08a93fdc68e1e42411a14efcf23656e
-        transaction_limit: 9500000 
+        transaction_limit: 9500000
         transaction_timeout: 1s
         minimum_confirmations: 1
         gas_estimation_buffer: 0
@@ -37,7 +37,7 @@ networks:
         chain_id: 42
         private_keys:
             - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-        transaction_limit: 1000000 
+        transaction_limit: 1000000
         transaction_timeout: 5m
         minimum_confirmations: 1
         gas_estimation_buffer: 10000
@@ -54,3 +54,8 @@ networks:
 retry:
     attempts: 20
     linear_delay: 1s
+prometheus:
+    url: "http://localhost:9090"
+    scrape_job_name: "local_scrape"
+    test_aggregation_interval: "3m"
+    query_timeout: "10s"
