@@ -51,7 +51,7 @@ var _ = Describe("Chainlink Node", func() {
 		err = ocrInstance.Fund(s.Wallets.Default(), big.NewInt(2000000000000000), big.NewInt(2000000000000000))
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// Create external adapter, returns 5 every time
+		// Create external Adapter, returns 5 every time
 		adapter := tools.NewExternalAdapter()
 
 		// Initialize bootstrap node

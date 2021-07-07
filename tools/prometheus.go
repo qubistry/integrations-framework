@@ -105,7 +105,7 @@ func (p *PromQueries) PipelineExecutionTimeAvgNow(jobPrefix string) (int64, erro
 	return p.toMs(scalarVal), nil
 }
 
-func (p *PromQueries) Summary(jobPrefix string) (*FluxRoundSummary, error) {
+func (p *PromQueries) FluxRoundSummary(jobPrefix string) (*FluxRoundSummary, error) {
 	cpu, err := p.CPUBusyPercentage()
 	if err != nil {
 		return nil, err

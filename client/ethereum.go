@@ -20,8 +20,11 @@ import (
 
 // EthereumClient wraps the client and the BlockChain network to interact with an EVM based Blockchain
 type EthereumClient struct {
-	Client  *ethclient.Client
-	Network BlockchainNetwork
+	Client       *ethclient.Client
+	Network      BlockchainNetwork
+	BorrowNonces bool
+	NonceMu      *sync.Mutex
+	Nonces       map[string]uint64
 }
 
 // ContractDeployer acts as a go-between function for general contract deployment
@@ -40,9 +43,40 @@ func NewEthereumClient(network BlockchainNetwork) (*EthereumClient, error) {
 	}
 
 	return &EthereumClient{
-		Network: network,
-		Client:  cl,
+		Network:      network,
+		Client:       cl,
+		BorrowNonces: false,
+		NonceMu:      &sync.Mutex{},
+		Nonces:       make(map[string]uint64),
 	}, nil
+}
+
+// BorrowedNonces allows to handle nonces optimistically without requesting every time
+func (e *EthereumClient) BorrowedNonces(n bool) {
+	e.BorrowNonces = n
+}
+
+// GetNonce keep tracking of nonces per address, add last nonce for addr if the map is empty
+func (e *EthereumClient) GetNonce(ctx context.Context, addr common.Address) (uint64, error) {
+	if e.BorrowNonces {
+		e.NonceMu.Lock()
+		defer e.NonceMu.Unlock()
+		if _, ok := e.Nonces[addr.Hex()]; !ok {
+			lastNonce, err := e.Client.PendingNonceAt(ctx, addr)
+			if err != nil {
+				return 0, err
+			}
+			e.Nonces[addr.Hex()] = lastNonce
+			return lastNonce, nil
+		}
+		e.Nonces[addr.Hex()] += 1
+		return e.Nonces[addr.Hex()], nil
+	}
+	lastNonce, err := e.Client.PendingNonceAt(ctx, addr)
+	if err != nil {
+		return 0, err
+	}
+	return lastNonce, nil
 }
 
 // Get returns the underlying client type to be used generically across the framework for switching
@@ -117,7 +151,7 @@ func (e *EthereumClient) SendTransaction(
 	if err != nil {
 		return nil, fmt.Errorf("invalid private key: %v", err)
 	}
-	nonce, err := e.Client.PendingNonceAt(context.Background(), common.HexToAddress(from.Address()))
+	nonce, err := e.GetNonce(context.Background(), common.HexToAddress(from.Address()))
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +238,7 @@ func (e *EthereumClient) TransactionOpts(
 	if err != nil {
 		return nil, err
 	}
-	nonce, err := e.Client.PendingNonceAt(context.Background(), common.HexToAddress(from.Address()))
+	nonce, err := e.GetNonce(context.Background(), common.HexToAddress(from.Address()))
 	if err != nil {
 		return nil, err
 	}
@@ -238,11 +272,15 @@ func (e *EthereumClient) WaitForTransaction(transactionHash common.Hash) error {
 	timeout := e.Network.Config().Timeout
 	confirmations := 0
 
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case err := <-subscription.Err():
 			return err
 		case header := <-headerChannel:
+			// FIXME: investigate why there is no new header with hardhat mining
 			minConfirmations := e.Network.Config().MinimumConfirmations
 
 			block, err := e.Client.BlockByNumber(context.Background(), header.Number)
@@ -266,6 +304,28 @@ func (e *EthereumClient) WaitForTransaction(transactionHash common.Hash) error {
 			confirmations++
 			confirmationLog.Msg("Transaction confirmed, waiting on confirmations")
 
+			if confirmations >= minConfirmations {
+				confirmationLog.Msg("Minimum confirmations met")
+				return err
+			} else {
+				confirmationLog.Msg("Waiting on minimum confirmations")
+			}
+		case <-ticker.C:
+			// FIXME: inefficient polling just to debug volume tests batch deployment
+			minConfirmations := e.Network.Config().MinimumConfirmations
+			confirmationLog := log.Debug().Str("Network", e.Network.Config().Name).
+				Str("Tx Hash", transactionHash.Hex()).
+				Int("Minimum Confirmations", minConfirmations).
+				Int("Total Confirmations", confirmations)
+			isConfirmed, err := e.isTxConfirmed(transactionHash)
+			if err != nil {
+				return err
+			} else if !isConfirmed {
+				confirmationLog.Msg("Transaction still pending, waiting for confirmation")
+				continue
+			}
+			confirmations++
+			confirmationLog.Msg("Transaction confirmed, waiting on confirmations")
 			if confirmations >= minConfirmations {
 				confirmationLog.Msg("Minimum confirmations met")
 				return err

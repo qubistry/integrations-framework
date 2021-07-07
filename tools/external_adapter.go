@@ -63,6 +63,7 @@ func NewExternalAdapter() ExternalAdapter {
 }
 
 func (e *ExternalAdapter) TriggerValueChange(i int) error {
+	log.Info().Int("round_id", i).Msg("triggering new round")
 	if i%2 == 0 {
 		_, err := SetVariableMockData(e.LocalAddr, 5)
 		if err != nil {
