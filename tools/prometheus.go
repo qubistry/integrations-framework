@@ -15,6 +15,7 @@ const (
 	QueryPipelineExecutionTimeAvgNow          = `avg(pipeline_run_total_time_to_completion{job="%s", job_name=~"%s.*"})`
 	QueryPipelineExecutionTimeAvgOverInterval = `avg(avg_over_time(pipeline_run_total_time_to_completion{job="%s", job_name=~"%s.*"}[%s]))`
 	QueryPipelineSumErrors                    = `sum(pipeline_run_errors{job="%s", job_name=~"%s.*"})`
+	QueryNodesLastReportedRounds              = `flux_monitor_reported_round{job="%s",job_spec_id=~".*"}`
 	QueryAllCPUBusyPercentage                 = `100 - (avg by (instance) (irate(node_cpu_seconds_total{job="%s",mode="idle"}[%s])) * 100)`
 )
 
@@ -40,6 +41,51 @@ func NewPrometheusClient(cfg *config.PrometheusClientConfig) *PromQueries {
 		API: v1.NewAPI(client),
 		Cfg: cfg,
 	}
+}
+
+// AwaitRoundFinishedAcrossNodes waits for all nodes to report next round
+func (p *PromQueries) AwaitRoundFinishedAcrossNodes(ctx context.Context, roundID int) (bool, error) {
+	ticker := time.NewTicker(1 * time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info().Msg("timeout awaiting new round on all nodes")
+			return false, nil
+		case <-ticker.C:
+			lastReportedRounds, err := p.NodesLastReportedRounds()
+			if err != nil {
+				return false, err
+			}
+			tryAgain := false
+			log.Info().Int("round_id", roundID).Msg("awaiting prometheus metrics")
+			for _, v := range lastReportedRounds {
+				if int(v.Value) != roundID {
+					tryAgain = true
+					break
+				}
+			}
+			if tryAgain {
+				continue
+			}
+			log.Debug().Interface("last_round_metrics", lastReportedRounds).Msg("new round reached")
+			return true, nil
+		}
+	}
+}
+
+func (p *PromQueries) NodesLastReportedRounds() (model.Vector, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
+	defer cancel()
+	// TODO: no job_name, ex. "flux monitor in labels", need to add or aggregate over job ids
+	q := fmt.Sprintf(QueryNodesLastReportedRounds, p.Cfg.ScrapeJobName)
+	val, warns, err := p.API.Query(ctx, q, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	if !p.validate(q, val, warns) {
+		return nil, nil
+	}
+	return val.(model.Vector), nil
 }
 
 func (p *PromQueries) toMs(val model.SampleValue) int64 {

@@ -51,7 +51,7 @@ func NewEthereumClient(network BlockchainNetwork) (*EthereumClient, error) {
 	}, nil
 }
 
-// BorrowedNonces allows to handle nonces optimistically without requesting every time
+// BorrowedNonces allows to handle nonces concurrently without requesting them every time
 func (e *EthereumClient) BorrowedNonces(n bool) {
 	e.BorrowNonces = n
 }
@@ -321,7 +321,7 @@ func (e *EthereumClient) WaitForTransaction(transactionHash common.Hash) error {
 			if err != nil {
 				return err
 			} else if !isConfirmed {
-				confirmationLog.Msg("Transaction still pending, waiting for confirmation")
+				//confirmationLog.Msg("Transaction still pending, waiting for confirmation")
 				continue
 			}
 			confirmations++
@@ -333,6 +333,7 @@ func (e *EthereumClient) WaitForTransaction(transactionHash common.Hash) error {
 				confirmationLog.Msg("Waiting on minimum confirmations")
 			}
 		case <-time.After(timeout):
+			log.Debug().Msg("tx waiting timeout reached")
 			isConfirmed, err := e.isTxConfirmed(transactionHash)
 			if err != nil {
 				return err

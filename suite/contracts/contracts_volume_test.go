@@ -3,21 +3,22 @@ package suite
 import (
 	"context"
 	"fmt"
+	"github.com/avast/retry-go"
 	"github.com/ethereum/go-ethereum/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/contracts"
 	"github.com/smartcontractkit/integrations-framework/suite"
 	"github.com/smartcontractkit/integrations-framework/tools"
 	"math/big"
-	"strings"
 	"sync"
 	"time"
 )
 
-type VolumeSpec struct {
+type VolumeTestSpec struct {
 	AggregatorsNum              int
 	JobPrefix                   string
 	ObservedValueChangeInterval time.Duration
@@ -26,24 +27,40 @@ type VolumeSpec struct {
 	FluxOptions                 contracts.FluxAggregatorOptions
 }
 
-type InstanceDeployment struct {
+type VolumeFluxInstanceDeployment struct {
 	Wg              *sync.WaitGroup
 	Index           int
 	Suite           *suite.DefaultSuiteSetup
-	Spec            *VolumeSpec
+	Spec            *VolumeTestSpec
 	Oracles         []common.Address
 	Nodes           []client.Chainlink
 	Adapter         tools.ExternalAdapter
 	FluxInstancesMu *sync.Mutex
-	FluxInstances   []contracts.FluxAggregator
+	FluxInstances   *[]contracts.FluxAggregator
+	FluxJobs        *[]*client.Job
 }
 
-func deployInstance(d *InstanceDeployment) {
+type VolumeFluxTest struct {
+	DefaultSetup  *suite.DefaultSuiteSetup
+	FluxInstances *[]contracts.FluxAggregator
+	FluxJobs      *[]*client.Job
+	Adapter       tools.ExternalAdapter
+	Nodes         []client.Chainlink
+	Prom          *tools.PromQueries
+}
+
+// roundVals structure only for debug on-chain check
+type roundVals struct {
+	RoundID int64
+	Val     int64
+}
+
+// deployFluxInstance deploy one flux instance concurrently, add jobs to all the nodes
+func deployFluxInstance(d *VolumeFluxInstanceDeployment) {
 	go func() {
 		defer d.Wg.Done()
 		log.Info().Int("instance_id", d.Index).Msg("deploying contracts instance")
 		fluxInstance, err := d.Suite.Deployer.DeployFluxAggregatorContract(d.Suite.Wallets.Default(), d.Spec.FluxOptions)
-		log.Error().Err(err).Msg("fatal error parallel deployment")
 		Expect(err).ShouldNot(HaveOccurred())
 		err = fluxInstance.Fund(d.Suite.Wallets.Default(), big.NewInt(0), big.NewInt(1e18))
 		Expect(err).ShouldNot(HaveOccurred())
@@ -56,14 +73,11 @@ func deployInstance(d *InstanceDeployment) {
 				AddList:            d.Oracles,
 				RemoveList:         []common.Address{},
 				AdminList:          d.Oracles,
-				MinSubmissions:     3,
-				MaxSubmissions:     3,
+				MinSubmissions:     5,
+				MaxSubmissions:     5,
 				RestartDelayRounds: 0,
 			})
 		Expect(err).ShouldNot(HaveOccurred())
-		oracles, err := fluxInstance.GetOracles(context.Background())
-		Expect(err).ShouldNot(HaveOccurred())
-		log.Info().Str("Oracles", strings.Join(oracles, ",")).Msg("oracles set")
 		for _, n := range d.Nodes {
 			fluxSpec := &client.FluxMonitorJobSpec{
 				Name:              fmt.Sprintf("%s_%d", d.Spec.JobPrefix, d.Index),
@@ -72,24 +86,24 @@ func deployInstance(d *InstanceDeployment) {
 				PollTimerDisabled: false,
 				ObservationSource: client.ObservationSourceSpec(d.Adapter.InsideDockerAddr + "/variable"),
 			}
-			_, err = n.CreateJob(fluxSpec)
+			job, err := n.CreateJob(fluxSpec)
 			Expect(err).ShouldNot(HaveOccurred())
+			d.FluxInstancesMu.Lock()
+			*d.FluxJobs = append(*d.FluxJobs, job)
+			d.FluxInstancesMu.Unlock()
 		}
 		d.FluxInstancesMu.Lock()
-		d.FluxInstances = append(d.FluxInstances, fluxInstance)
+		*d.FluxInstances = append(*d.FluxInstances, fluxInstance)
 		d.FluxInstancesMu.Unlock()
 	}()
 }
 
-// DeployVolumeFlux deploys AggregatorsNum aggregators, creates jobs on all nodes for every aggregator
-func DeployVolumeFlux(spec *VolumeSpec) (*suite.DefaultSuiteSetup, []contracts.FluxAggregator, tools.ExternalAdapter) {
+// NewVolumeFluxTest deploys AggregatorsNum flux aggregators concurrently
+func NewVolumeFluxTest(spec *VolumeTestSpec) *VolumeFluxTest {
 	s, err := suite.DefaultLocalSetup(spec.InitFunc)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	clNodes, nodeAddrs, err := suite.ConnectToTemplateNodes()
-	// TODO: just keep 3 before we have k8s
-	oraclesAtTest := nodeAddrs[:3]
-	clNodesAtTest := clNodes[:3]
 	Expect(err).ShouldNot(HaveOccurred())
 	err = suite.FundTemplateNodes(s.Client, s.Wallets, clNodes, 2e18, 0)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -98,58 +112,131 @@ func DeployVolumeFlux(spec *VolumeSpec) (*suite.DefaultSuiteSetup, []contracts.F
 
 	adapter := tools.NewExternalAdapter()
 
-	var fluxInstances []contracts.FluxAggregator
+	fluxInstances := make([]contracts.FluxAggregator, 0)
+	fluxJobs := make([]*client.Job, 0)
 	mu := &sync.Mutex{}
 	wg := &sync.WaitGroup{}
 	for i := 0; i < spec.AggregatorsNum; i++ {
 		wg.Add(1)
-		deployInstance(&InstanceDeployment{
+		deployFluxInstance(&VolumeFluxInstanceDeployment{
 			Wg:              wg,
 			Index:           i,
 			Suite:           s,
 			Spec:            spec,
-			Oracles:         oraclesAtTest,
-			Nodes:           clNodesAtTest,
+			Oracles:         nodeAddrs,
+			Nodes:           clNodes,
 			Adapter:         adapter,
 			FluxInstancesMu: mu,
-			FluxInstances:   fluxInstances,
+			FluxInstances:   &fluxInstances,
+			FluxJobs:        &fluxJobs,
 		})
 	}
 	wg.Wait()
-	return s, fluxInstances, adapter
+	prom := tools.NewPrometheusClient(s.Config.Prometheus)
+	return &VolumeFluxTest{
+		DefaultSetup:  s,
+		FluxInstances: &fluxInstances,
+		FluxJobs:      &fluxJobs,
+		Adapter:       adapter,
+		Nodes:         clNodes,
+		Prom:          prom,
+	}
 }
 
-var _ = FDescribe("Volume tests", func() {
-	var iteration = 1
+func (vt *VolumeFluxTest) AwaitRoundFinishedOnChain(roundID int, newVal int) {
+	if err := retry.Do(func() error {
+		if !vt.checkRoundFinishedOnChain(roundID, newVal) {
+			return errors.New("round is not finished")
+		}
+		return nil
+	}); err != nil {
+		log.Fatal().Msg("round is not fully finished on chain")
+	}
+}
+
+func (vt *VolumeFluxTest) debugRoundTuple(rounds []*contracts.FluxAggregatorData) {
+	roundValsArr := make([]roundVals, 0)
+	for _, r := range rounds {
+		if r == nil {
+			continue
+		}
+		roundValsArr = append(roundValsArr, roundVals{
+			RoundID: r.LatestRoundData.RoundId.Int64(),
+			Val:     r.LatestRoundData.Answer.Int64(),
+		})
+	}
+	log.Debug().Interface("rounds_on_chain", roundValsArr).Msg("last rounds on chain")
+}
+
+func (vt *VolumeFluxTest) checkRoundFinishedOnChain(roundID int, newVal int) bool {
+	log.Debug().Int("round_id", roundID).Msg("checking round completion on chain")
+	var rounds []*contracts.FluxAggregatorData
+	for _, flux := range *vt.FluxInstances {
+		cd, err := flux.GetContractData(context.Background())
+		if err != nil {
+			log.Err(err).Msg("error checking flux last round")
+			return false
+		}
+		rounds = append(rounds, cd)
+	}
+	vt.debugRoundTuple(rounds)
+	for _, r := range rounds {
+		if r.LatestRoundData.RoundId.Int64() != int64(roundID) || r.LatestRoundData.Answer.Int64() != int64(newVal) {
+			return false
+		}
+	}
+	return true
+}
+
+var _ = Describe("Flux monitor volume tests", func() {
 	jobPrefix := "flux_monitor"
-	s, _, adapter := DeployVolumeFlux(&VolumeSpec{
-		AggregatorsNum:     10,
+	vt := NewVolumeFluxTest(&VolumeTestSpec{
+		AggregatorsNum:     100,
 		JobPrefix:          jobPrefix,
 		NodePollTimePeriod: 15 * time.Second,
 		InitFunc:           client.NewHardhatNetwork,
 		FluxOptions:        contracts.DefaultFluxAggregatorOptions(),
 	})
-	prom := tools.NewPrometheusClient(s.Config.Prometheus)
-	Measure("Should process one round with 100 contracts, 100 submits per node", func(b Benchmarker) {
-		// all contracts/nodes/jobs are setup at that point, triggering new round,
-		// waiting for all contracts to complete one round and get metrics
-		err := adapter.TriggerValueChange(iteration)
-		if err != nil {
-			log.Fatal().Err(err)
-		}
-		// TODO: check all contracts have one round completed, options are:
-		// TODO: 1. poll prom metrics for last seen round, ensure all nodes have complete next round and there is no errors
-		// TODO: 2. override contract submit method, when round is complete call another collector contract
-		// TODO: when all nodes have complete one round listen to RoundComplete event
-		time.Sleep(20 * time.Second)
-		summary, err := prom.FluxRoundSummary(jobPrefix)
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to get prom summary")
-		}
-		b.RecordValue("sum cpu", summary.CPUPercentage)
-		b.RecordValue("sum pipeline execution time over interval",
-			float64(summary.PipelineExecutionTimeAvgOverIntervalMilliseconds))
-		b.RecordValue("sum execution errors", float64(summary.PipelineErrorsSum))
-		iteration += 1
-	}, 10)
+	Describe("consistency test", func() {
+		// start from one so currentSample = currentRound
+		promRoundTimeout := 60 * time.Second
+		currentSample := 1
+		samples := 5
+
+		Measure("Should process rounds without errors", func(b Benchmarker) {
+			// all contracts/nodes/jobs are setup at that point, triggering new round,
+			// waiting for all contracts to complete one round and get metrics
+			newVal, err := vt.Adapter.TriggerValueChange(currentSample)
+			if err != nil {
+				log.Fatal().Err(err)
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), promRoundTimeout)
+			defer cancel()
+
+			// await all nodes report round was finished
+			roundFinished, err := vt.Prom.AwaitRoundFinishedAcrossNodes(ctx, currentSample+1)
+			if err != nil {
+				log.Fatal().Err(err).Msg("failed to check round consistency")
+			}
+			if !roundFinished {
+				log.Fatal().Msg("round was not finished in time")
+			}
+
+			// await all round data is on chain
+			vt.AwaitRoundFinishedOnChain(currentSample+1, newVal)
+			summary, err := vt.Prom.FluxRoundSummary(jobPrefix)
+			if err != nil {
+				log.Error().Err(err).Msg("failed to get prom summary")
+				return
+			}
+
+			// record benchmark metrics
+			b.RecordValue("sum cpu", summary.CPUPercentage)
+			b.RecordValue("sum pipeline execution time over interval",
+				float64(summary.PipelineExecutionTimeAvgOverIntervalMilliseconds))
+			b.RecordValue("sum execution errors", float64(summary.PipelineErrorsSum))
+			currentSample += 1
+		}, samples)
+	})
 })

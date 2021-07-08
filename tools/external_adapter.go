@@ -62,21 +62,21 @@ func NewExternalAdapter() ExternalAdapter {
 	}
 }
 
-func (e *ExternalAdapter) TriggerValueChange(i int) error {
-	log.Info().Int("round_id", i).Msg("triggering new round")
+func (e *ExternalAdapter) TriggerValueChange(i int) (int, error) {
+	log.Info().Int("iteration", i).Msg("triggering new round")
 	if i%2 == 0 {
 		_, err := SetVariableMockData(e.LocalAddr, 5)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		return nil
+		return 5, nil
 	} else {
 		_, err := SetVariableMockData(e.LocalAddr, 6)
 		if err != nil {
-			return err
+			return 0, err
 		}
+		return 6, nil
 	}
-	return nil
 }
 
 func SetVariableMockData(url string, data int) (*http.Response, error) {
@@ -133,7 +133,7 @@ func five(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 
 func setVariable(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	q := r.URL.Query()
-	log.Info().Interface("query", q).Msg("params received")
+	log.Info().Interface("query", q).Msg("setting variable answer")
 	v := q.Get("var")
 	data, _ := strconv.Atoi(v)
 	variableData = data
@@ -144,7 +144,6 @@ func setVariable(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func variable(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	log.Info().Int("data", variableData).Msg("variable response")
 	result := &ExternalAdapterResponse{
 		JobRunId: "",
 		Data:     ExternalAdapterData{Result: variableData},
