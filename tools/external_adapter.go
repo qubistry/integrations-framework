@@ -30,7 +30,7 @@ type ExternalAdapterData struct {
 
 type OkResult struct{}
 
-var variableData int
+var VariableData = 5
 
 func FreePort() string {
 	port, err := freeport.GetFreePort()
@@ -136,7 +136,7 @@ func setVariable(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	log.Info().Interface("query", q).Msg("setting variable answer")
 	v := q.Get("var")
 	data, _ := strconv.Atoi(v)
-	variableData = data
+	VariableData = data
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	result := &OkResult{}
 	_ = json.NewEncoder(w).Encode(result)
@@ -146,7 +146,7 @@ func variable(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	result := &ExternalAdapterResponse{
 		JobRunId: "",
-		Data:     ExternalAdapterData{Result: variableData},
+		Data:     ExternalAdapterData{Result: VariableData},
 		Error:    nil,
 	}
 	_ = json.NewEncoder(w).Encode(result)

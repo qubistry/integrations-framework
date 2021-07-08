@@ -73,16 +73,18 @@ func deployFluxInstance(d *VolumeFluxInstanceDeployment) {
 				AddList:            d.Oracles,
 				RemoveList:         []common.Address{},
 				AdminList:          d.Oracles,
-				MinSubmissions:     5,
-				MaxSubmissions:     5,
+				MinSubmissions:     uint32(len(d.Oracles)),
+				MaxSubmissions:     uint32(len(d.Oracles)),
 				RestartDelayRounds: 0,
 			})
 		Expect(err).ShouldNot(HaveOccurred())
 		for _, n := range d.Nodes {
 			fluxSpec := &client.FluxMonitorJobSpec{
-				Name:              fmt.Sprintf("%s_%d", d.Spec.JobPrefix, d.Index),
-				ContractAddress:   fluxInstance.Address(),
-				PollTimerPeriod:   d.Spec.NodePollTimePeriod,
+				Name:            fmt.Sprintf("%s_%d", d.Spec.JobPrefix, d.Index),
+				ContractAddress: fluxInstance.Address(),
+				PollTimerPeriod: d.Spec.NodePollTimePeriod,
+				// it's crucial not to skew rounds schedule for volume tests
+				IdleTimerDisabled: true,
 				PollTimerDisabled: false,
 				ObservationSource: client.ObservationSourceSpec(d.Adapter.InsideDockerAddr + "/variable"),
 			}
@@ -191,17 +193,19 @@ func (vt *VolumeFluxTest) checkRoundFinishedOnChain(roundID int, newVal int) boo
 var _ = Describe("Flux monitor volume tests", func() {
 	jobPrefix := "flux_monitor"
 	vt := NewVolumeFluxTest(&VolumeTestSpec{
-		AggregatorsNum:     5,
+		AggregatorsNum:     20,
 		JobPrefix:          jobPrefix,
 		NodePollTimePeriod: 15 * time.Second,
 		InitFunc:           client.NewHardhatNetwork,
 		FluxOptions:        contracts.DefaultFluxAggregatorOptions(),
 	})
 	FDescribe("round completion times", func() {
+		promRoundTimeout := 180 * time.Second
 		// start from one so currentSample = currentRound
-		promRoundTimeout := 60 * time.Second
 		currentSample := 1
 		samples := 5
+		// just wait for first round to settle about initial data
+		vt.AwaitRoundFinishedOnChain(currentSample, tools.VariableData)
 
 		Measure("Should process rounds without errors", func(b Benchmarker) {
 			// all contracts/nodes/jobs are setup at that point, triggering new round,
