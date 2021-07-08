@@ -191,13 +191,13 @@ func (vt *VolumeFluxTest) checkRoundFinishedOnChain(roundID int, newVal int) boo
 var _ = Describe("Flux monitor volume tests", func() {
 	jobPrefix := "flux_monitor"
 	vt := NewVolumeFluxTest(&VolumeTestSpec{
-		AggregatorsNum:     100,
+		AggregatorsNum:     5,
 		JobPrefix:          jobPrefix,
 		NodePollTimePeriod: 15 * time.Second,
 		InitFunc:           client.NewHardhatNetwork,
 		FluxOptions:        contracts.DefaultFluxAggregatorOptions(),
 	})
-	Describe("consistency test", func() {
+	FDescribe("round completion times", func() {
 		// start from one so currentSample = currentRound
 		promRoundTimeout := 60 * time.Second
 		currentSample := 1

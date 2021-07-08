@@ -58,5 +58,5 @@ retry:
 prometheus:
     url: "http://localhost:9090"
     scrape_job_name: "local_scrape"
-    test_aggregation_interval: "3m"
+    test_aggregation_interval: "1m"
     query_timeout: "10s"
