@@ -38,6 +38,14 @@ breaking.
    
    test_nightly - run tests 20 times in a row, no parallel
 
+## Common issues
+When running compose a lot, docker cleanup may be needed in case of `no space left on device`
+```
+docker system prune
+docker volume rm $(docker volume ls -qf dangling=true)
+docker rmi $(docker images | grep '^<none>' | awk '{print $3}')
+```
+
 ## Example Usage
 
 You can see our tests for some basic usage examples. The most complete can be found in `contracts/contracts_test.go`

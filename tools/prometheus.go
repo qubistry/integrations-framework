@@ -19,32 +19,49 @@ const (
 	QueryAllCPUBusyPercentage                 = `100 - (avg by (instance) (irate(node_cpu_seconds_total{job="%s",mode="idle"}[%s])) * 100)`
 )
 
+type FluxRoundMetrics struct {
+	Instance string
+	JobID    int
+	Value    int
+}
+
 type FluxRoundSummary struct {
 	PipelineExecutionTimeAvgOverIntervalMilliseconds int64
 	PipelineErrorsSum                                int64
 	CPUPercentage                                    float64
 }
 
-type PromQueries struct {
+type PromChecker struct {
 	API v1.API
 	Cfg *config.PrometheusClientConfig
 }
 
-func NewPrometheusClient(cfg *config.PrometheusClientConfig) *PromQueries {
+func NewPrometheusClient(cfg *config.PrometheusClientConfig) *PromChecker {
 	client, err := api.NewClient(api.Config{
 		Address: cfg.Url,
 	})
 	if err != nil {
 		log.Fatal().Err(err)
 	}
-	return &PromQueries{
+	return &PromChecker{
 		API: v1.NewAPI(client),
 		Cfg: cfg,
 	}
 }
 
+func (p *PromChecker) debugRoundMetrics(vec model.Vector) {
+	var metrics []FluxRoundMetrics
+	for _, m := range vec {
+		metrics = append(metrics, FluxRoundMetrics{
+			Instance: string(m.Metric["instance"]),
+			Value:    int(m.Value),
+		})
+	}
+	log.Debug().Interface("last_round_metrics", metrics).Msg("new round reached")
+}
+
 // AwaitRoundFinishedAcrossNodes waits for all nodes to report next round
-func (p *PromQueries) AwaitRoundFinishedAcrossNodes(ctx context.Context, roundID int) (bool, error) {
+func (p *PromChecker) AwaitRoundFinishedAcrossNodes(ctx context.Context, roundID int) (bool, error) {
 	ticker := time.NewTicker(1 * time.Second)
 	for {
 		select {
@@ -67,13 +84,13 @@ func (p *PromQueries) AwaitRoundFinishedAcrossNodes(ctx context.Context, roundID
 			if tryAgain {
 				continue
 			}
-			log.Debug().Interface("last_round_metrics", lastReportedRounds).Msg("new round reached")
+			p.debugRoundMetrics(lastReportedRounds)
 			return true, nil
 		}
 	}
 }
 
-func (p *PromQueries) NodesLastReportedRounds() (model.Vector, error) {
+func (p *PromChecker) NodesLastReportedRounds() (model.Vector, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
 	defer cancel()
 	// TODO: no job_name, ex. "flux monitor in labels", need to add or aggregate over job ids
@@ -82,20 +99,24 @@ func (p *PromQueries) NodesLastReportedRounds() (model.Vector, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !p.validate(q, val, warns) {
+	p.printWarns(warns)
+	if !p.validateNotEmptyVec(q, val) {
 		return nil, nil
 	}
 	return val.(model.Vector), nil
 }
 
-func (p *PromQueries) toMs(val model.SampleValue) int64 {
+func (p *PromChecker) toMs(val model.SampleValue) int64 {
 	return time.Duration(int64(val)).Milliseconds()
 }
 
-func (p *PromQueries) validate(q string, val model.Value, warns v1.Warnings) bool {
+func (p *PromChecker) printWarns(warns v1.Warnings) {
 	if len(warns) > 0 {
 		log.Info().Interface("warnings", warns).Msg("warnings found when performing prometheus query")
 	}
+}
+
+func (p *PromChecker) validateNotEmptyVec(q string, val model.Value) bool {
 	if len(val.(model.Vector)) == 0 {
 		log.Warn().Str("query", q).Msg("empty response for prometheus query")
 		return false
@@ -104,7 +125,7 @@ func (p *PromQueries) validate(q string, val model.Value, warns v1.Warnings) boo
 }
 
 // CPUBusyPercentage host CPU busy percentage
-func (p *PromQueries) CPUBusyPercentage() (float64, error) {
+func (p *PromChecker) CPUBusyPercentage() (float64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
 	defer cancel()
 	q := fmt.Sprintf(QueryAllCPUBusyPercentage, p.Cfg.ScrapeJobName, p.Cfg.TestAggregationInterval)
@@ -112,7 +133,8 @@ func (p *PromQueries) CPUBusyPercentage() (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if !p.validate(q, val, warns) {
+	p.printWarns(warns)
+	if !p.validateNotEmptyVec(q, val) {
 		return 0, nil
 	}
 	scalarVal := val.(model.Vector)[0].Value
@@ -120,7 +142,7 @@ func (p *PromQueries) CPUBusyPercentage() (float64, error) {
 }
 
 // PipelineErrorsSum sum all errors across nodes and jobs
-func (p *PromQueries) PipelineErrorsSum(jobPrefix string) (int64, error) {
+func (p *PromChecker) PipelineErrorsSum(jobPrefix string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
 	defer cancel()
 	q := fmt.Sprintf(QueryPipelineSumErrors, p.Cfg.ScrapeJobName, jobPrefix)
@@ -128,7 +150,8 @@ func (p *PromQueries) PipelineErrorsSum(jobPrefix string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if !p.validate(q, val, warns) {
+	p.printWarns(warns)
+	if len(val.(model.Vector)) == 0 {
 		return 0, nil
 	}
 	scalarVal := val.(model.Vector)[0].Value
@@ -136,7 +159,7 @@ func (p *PromQueries) PipelineErrorsSum(jobPrefix string) (int64, error) {
 }
 
 // PipelineExecutionTimeAvgNow average of total execution time over all pipelines now
-func (p *PromQueries) PipelineExecutionTimeAvgNow(jobPrefix string) (int64, error) {
+func (p *PromChecker) PipelineExecutionTimeAvgNow(jobPrefix string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
 	defer cancel()
 	q := fmt.Sprintf(QueryPipelineExecutionTimeAvgNow, p.Cfg.ScrapeJobName, jobPrefix)
@@ -144,14 +167,15 @@ func (p *PromQueries) PipelineExecutionTimeAvgNow(jobPrefix string) (int64, erro
 	if err != nil {
 		return 0, err
 	}
-	if !p.validate(q, val, warns) {
+	p.printWarns(warns)
+	if !p.validateNotEmptyVec(q, val) {
 		return 0, nil
 	}
 	scalarVal := val.(model.Vector)[0].Value
 	return p.toMs(scalarVal), nil
 }
 
-func (p *PromQueries) FluxRoundSummary(jobPrefix string) (*FluxRoundSummary, error) {
+func (p *PromChecker) FluxRoundSummary(jobPrefix string) (*FluxRoundSummary, error) {
 	cpu, err := p.CPUBusyPercentage()
 	if err != nil {
 		return nil, err
@@ -172,7 +196,7 @@ func (p *PromQueries) FluxRoundSummary(jobPrefix string) (*FluxRoundSummary, err
 }
 
 // PipelineExecutionTimeAvgOverInterval average of total execution time over all pipelines in aggregation (test) interval
-func (p *PromQueries) PipelineExecutionTimeAvgOverInterval(jobPrefix string) (int64, error) {
+func (p *PromChecker) PipelineExecutionTimeAvgOverInterval(jobPrefix string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
 	defer cancel()
 	q := fmt.Sprintf(QueryPipelineExecutionTimeAvgOverInterval, p.Cfg.ScrapeJobName, jobPrefix, p.Cfg.TestAggregationInterval)
@@ -180,7 +204,8 @@ func (p *PromQueries) PipelineExecutionTimeAvgOverInterval(jobPrefix string) (in
 	if err != nil {
 		return 0, err
 	}
-	if !p.validate(q, val, warns) {
+	p.printWarns(warns)
+	if !p.validateNotEmptyVec(q, val) {
 		return 0, nil
 	}
 	scalarVal := val.(model.Vector)[0].Value

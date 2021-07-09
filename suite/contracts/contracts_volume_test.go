@@ -46,7 +46,7 @@ type VolumeFluxTest struct {
 	FluxJobs      *[]*client.Job
 	Adapter       tools.ExternalAdapter
 	Nodes         []client.Chainlink
-	Prom          *tools.PromQueries
+	Prom          *tools.PromChecker
 }
 
 // roundVals structure only for debug on-chain check
@@ -193,24 +193,23 @@ func (vt *VolumeFluxTest) checkRoundFinishedOnChain(roundID int, newVal int) boo
 var _ = Describe("Flux monitor volume tests", func() {
 	jobPrefix := "flux_monitor"
 	vt := NewVolumeFluxTest(&VolumeTestSpec{
-		AggregatorsNum:     20,
+		AggregatorsNum:     5,
 		JobPrefix:          jobPrefix,
 		NodePollTimePeriod: 15 * time.Second,
 		InitFunc:           client.NewHardhatNetwork,
 		FluxOptions:        contracts.DefaultFluxAggregatorOptions(),
 	})
 	FDescribe("round completion times", func() {
-		promRoundTimeout := 180 * time.Second
-		// start from one so currentSample = currentRound
-		currentSample := 1
-		samples := 5
-		// just wait for first round to settle about initial data
-		vt.AwaitRoundFinishedOnChain(currentSample, tools.VariableData)
+		promRoundTimeout := 120 * time.Second
+		currentRound := 1
+		rounds := 50
+		// just wait for the first round to settle about initial data
+		vt.AwaitRoundFinishedOnChain(currentRound, tools.VariableData)
 
 		Measure("Should process rounds without errors", func(b Benchmarker) {
 			// all contracts/nodes/jobs are setup at that point, triggering new round,
 			// waiting for all contracts to complete one round and get metrics
-			newVal, err := vt.Adapter.TriggerValueChange(currentSample)
+			newVal, err := vt.Adapter.TriggerValueChange(currentRound)
 			if err != nil {
 				log.Fatal().Err(err)
 			}
@@ -219,7 +218,7 @@ var _ = Describe("Flux monitor volume tests", func() {
 			defer cancel()
 
 			// await all nodes report round was finished
-			roundFinished, err := vt.Prom.AwaitRoundFinishedAcrossNodes(ctx, currentSample+1)
+			roundFinished, err := vt.Prom.AwaitRoundFinishedAcrossNodes(ctx, currentRound+1)
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to check round consistency")
 			}
@@ -228,7 +227,7 @@ var _ = Describe("Flux monitor volume tests", func() {
 			}
 
 			// await all round data is on chain
-			vt.AwaitRoundFinishedOnChain(currentSample+1, newVal)
+			vt.AwaitRoundFinishedOnChain(currentRound+1, newVal)
 			summary, err := vt.Prom.FluxRoundSummary(jobPrefix)
 			if err != nil {
 				log.Error().Err(err).Msg("failed to get prom summary")
@@ -240,7 +239,7 @@ var _ = Describe("Flux monitor volume tests", func() {
 			b.RecordValue("sum pipeline execution time over interval",
 				float64(summary.PipelineExecutionTimeAvgOverIntervalMilliseconds))
 			b.RecordValue("sum execution errors", float64(summary.PipelineErrorsSum))
-			currentSample += 1
-		}, samples)
+			currentRound += 1
+		}, rounds)
 	})
 })
