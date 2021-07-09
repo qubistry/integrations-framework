@@ -74,7 +74,7 @@ func (p *PromChecker) AwaitRoundFinishedAcrossNodes(ctx context.Context, roundID
 				return false, err
 			}
 			tryAgain := false
-			log.Info().Int("round_id", roundID).Msg("awaiting prometheus metrics")
+			log.Info().Int("round_id", roundID).Msg("awaiting flux_monitor_reported_round is consistent across nodes")
 			for _, v := range lastReportedRounds {
 				if int(v.Value) != roundID {
 					tryAgain = true

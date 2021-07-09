@@ -20,6 +20,10 @@ install-deps: gomod golangci ## install necessary dependencies
 test: ## run tests
 	go test -v ./... -count 1 -p 1
 
+.PHONY: test
+test_volume: ## run volume tests
+	go test -v ./suite/volume/... -count 1 -p 1 -timeout 100m
+
 .PHONY: test_race
 test_race: ## run tests with race
 	go test -v ./... -race -count 1 -p 1
