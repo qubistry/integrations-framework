@@ -72,7 +72,7 @@ var _ = Describe("Flux monitor suite", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 		}
 		// first change
-		_, _ = tools.SetVariableMockData(adapter.LocalAddr, 5)
+		_, _ = tools.SetVariableMockData(adapter.LocalAddr, tools.VariableData+1)
 		err = fluxInstance.AwaitNextRoundFinalized(context.Background())
 		Expect(err).ShouldNot(HaveOccurred())
 		{
@@ -80,21 +80,21 @@ var _ = Describe("Flux monitor suite", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			log.Info().Interface("data", data).Msg("round data")
 			Expect(len(data.Oracles)).Should(Equal(3))
-			Expect(data.LatestRoundData.Answer.Int64()).Should(Equal(int64(5)))
+			Expect(data.LatestRoundData.Answer.Int64()).Should(Equal(int64(tools.VariableData)))
 			Expect(data.LatestRoundData.RoundId.Int64()).Should(Equal(int64(1)))
 			Expect(data.LatestRoundData.AnsweredInRound.Int64()).Should(Equal(int64(1)))
 			Expect(data.AvailableFunds.Int64()).Should(Equal(int64(999999999999999997)))
 			Expect(data.AllocatedFunds.Int64()).Should(Equal(int64(3)))
 		}
 		// second change + 20%
-		_, _ = tools.SetVariableMockData(adapter.LocalAddr, 6)
+		_, _ = tools.SetVariableMockData(adapter.LocalAddr, tools.VariableData-1)
 		err = fluxInstance.AwaitNextRoundFinalized(context.Background())
 		Expect(err).ShouldNot(HaveOccurred())
 		{
 			data, err := fluxInstance.GetContractData(context.Background())
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(len(data.Oracles)).Should(Equal(3))
-			Expect(data.LatestRoundData.Answer.Int64()).Should(Equal(int64(6)))
+			Expect(data.LatestRoundData.Answer.Int64()).Should(Equal(int64(tools.VariableData)))
 			Expect(data.LatestRoundData.RoundId.Int64()).Should(Equal(int64(2)))
 			Expect(data.LatestRoundData.AnsweredInRound.Int64()).Should(Equal(int64(2)))
 			Expect(data.AvailableFunds.Int64()).Should(Equal(int64(999999999999999994)))
