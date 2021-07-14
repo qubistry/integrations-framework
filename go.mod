@@ -32,5 +32,3 @@ require (
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 )
-
-//replace github.com/skudasov/ethlog => /Users/f4hrenh9it/go/src/ethlog
