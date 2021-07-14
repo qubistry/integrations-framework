@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/phayes/freeport"
+	"github.com/pkg/errors"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -32,17 +33,20 @@ type OkResult struct{}
 
 var VariableData = 5
 
-func FreePort() string {
+func FreePort() (string, error) {
 	port, err := freeport.GetFreePort()
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to acquire free port")
+		return "", errors.Wrap(err, "failed to acquire free port")
 	}
-	return strconv.Itoa(port)
+	return strconv.Itoa(port), nil
 }
 
 // NewExternalAdapter starts an external adapter on specified port
-func NewExternalAdapter() ExternalAdapter {
-	p := FreePort()
+func NewExternalAdapter() (ExternalAdapter, error) {
+	p, err := FreePort()
+	if err != nil {
+		return ExternalAdapter{}, err
+	}
 	// TODO: graceful is needed for some cases and nightly
 	go func() {
 		router := httprouter.New()
@@ -59,7 +63,7 @@ func NewExternalAdapter() ExternalAdapter {
 	return ExternalAdapter{
 		LocalAddr:        fmt.Sprintf("http://0.0.0.0:%s", p),
 		InsideDockerAddr: fmt.Sprintf("http://host.docker.internal:%s", p),
-	}
+	}, nil
 }
 
 func (e *ExternalAdapter) TriggerValueChange(i int) (int, error) {

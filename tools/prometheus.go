@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/rs/zerolog/log"
 	"github.com/smartcontractkit/integrations-framework/config"
+	"strconv"
 	"time"
 )
 
@@ -16,6 +17,7 @@ const (
 	QueryPipelineExecutionTimeAvgOverInterval = `avg(avg_over_time(pipeline_run_total_time_to_completion{job="%s", job_name=~"%s.*"}[%s]))`
 	QueryPipelineSumErrors                    = `sum(pipeline_run_errors{job="%s", job_name=~"%s.*"})`
 	QueryNodesLastReportedRounds              = `flux_monitor_reported_round{job="%s",job_spec_id=~".*"}`
+	QueryNodesLastReportedRoundsTs            = `timestamp(flux_monitor_reported_round{job="%s",job_spec_id=~".*"})`
 	QueryAllCPUBusyPercentage                 = `100 - (avg by (instance) (irate(node_cpu_seconds_total{job="%s",mode="idle"}[%s])) * 100)`
 )
 
@@ -36,24 +38,26 @@ type PromChecker struct {
 	Cfg *config.PrometheusClientConfig
 }
 
-func NewPrometheusClient(cfg *config.PrometheusClientConfig) *PromChecker {
+func NewPrometheusClient(cfg *config.PrometheusClientConfig) (*PromChecker, error) {
 	client, err := api.NewClient(api.Config{
 		Address: cfg.Url,
 	})
 	if err != nil {
-		log.Fatal().Err(err)
+		return nil, err
 	}
 	return &PromChecker{
 		API: v1.NewAPI(client),
 		Cfg: cfg,
-	}
+	}, nil
 }
 
 func (p *PromChecker) debugRoundMetrics(vec model.Vector) {
 	var metrics []FluxRoundMetrics
 	for _, m := range vec {
+		jobSpecID, _ := strconv.Atoi(string(m.Metric["job_spec_id"]))
 		metrics = append(metrics, FluxRoundMetrics{
 			Instance: string(m.Metric["instance"]),
+			JobID:    jobSpecID,
 			Value:    int(m.Value),
 		})
 	}
@@ -93,8 +97,22 @@ func (p *PromChecker) AwaitRoundFinishedAcrossNodes(ctx context.Context, roundID
 func (p *PromChecker) NodesLastReportedRounds() (model.Vector, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
 	defer cancel()
-	// TODO: no job_name, ex. "flux monitor in labels", need to add or aggregate over job ids
 	q := fmt.Sprintf(QueryNodesLastReportedRounds, p.Cfg.ScrapeJobName)
+	val, warns, err := p.API.Query(ctx, q, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	p.printWarns(warns)
+	if !p.validateNotEmptyVec(q, val) {
+		return nil, nil
+	}
+	return val.(model.Vector), nil
+}
+
+func (p *PromChecker) NodesLastReportedRoundsTs() (model.Vector, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
+	defer cancel()
+	q := fmt.Sprintf(QueryNodesLastReportedRoundsTs, p.Cfg.ScrapeJobName)
 	val, warns, err := p.API.Query(ctx, q, time.Now())
 	if err != nil {
 		return nil, err

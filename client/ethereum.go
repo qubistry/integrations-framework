@@ -27,6 +27,15 @@ type EthereumClient struct {
 	Nonces       map[string]uint64
 }
 
+// BlockNumber gets latest block number
+func (e *EthereumClient) BlockNumber(ctx context.Context) (uint64, error) {
+	bn, err := e.Client.BlockNumber(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return bn, nil
+}
+
 // ContractDeployer acts as a go-between function for general contract deployment
 type ContractDeployer func(auth *bind.TransactOpts, backend bind.ContractBackend) (
 	common.Address,
@@ -272,15 +281,17 @@ func (e *EthereumClient) WaitForTransaction(transactionHash common.Hash) error {
 	timeout := e.Network.Config().Timeout
 	confirmations := 0
 
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
+	txHashTicker := time.NewTicker(200 * time.Millisecond)
+	defer txHashTicker.Stop()
 
 	for {
 		select {
 		case err := <-subscription.Err():
 			return err
 		case header := <-headerChannel:
-			// FIXME: investigate why there is no new header with hardhat mining
+			// FIXME: for concurrent mode
+			// FIXME: need to be refactored as a background subscriber for blocks, checking confirmations,
+			// FIXME: puts tx_hash into a map, others polling for a tx_hash check
 			minConfirmations := e.Network.Config().MinimumConfirmations
 
 			block, err := e.Client.BlockByNumber(context.Background(), header.Number)
@@ -310,8 +321,8 @@ func (e *EthereumClient) WaitForTransaction(transactionHash common.Hash) error {
 			} else {
 				confirmationLog.Msg("Waiting on minimum confirmations")
 			}
-		case <-ticker.C:
-			// FIXME: inefficient polling just to debug volume tests batch deployment
+		case <-txHashTicker.C:
+			// FIXME: polling tx_hash as a temporal solution
 			minConfirmations := e.Network.Config().MinimumConfirmations
 			confirmationLog := log.Debug().Str("Network", e.Network.Config().Name).
 				Str("Tx Hash", transactionHash.Hex()).
@@ -321,7 +332,6 @@ func (e *EthereumClient) WaitForTransaction(transactionHash common.Hash) error {
 			if err != nil {
 				return err
 			} else if !isConfirmed {
-				//confirmationLog.Msg("Transaction still pending, waiting for confirmation")
 				continue
 			}
 			confirmations++

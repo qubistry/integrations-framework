@@ -2,6 +2,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -24,6 +25,7 @@ const (
 // BlockchainClient is the interface that wraps a given client implementation for a blockchain, to allow for switching
 // of network types within the test suite
 type BlockchainClient interface {
+	BlockNumber(ctx context.Context) (uint64, error)
 	Get() interface{}
 	Fund(fromWallet BlockchainWallet, toAddress string, nativeAmount, linkAmount *big.Int) error
 }

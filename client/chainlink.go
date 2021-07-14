@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"io/ioutil"
 	"net/http"
 	"strings"
-
-	"github.com/rs/zerolog/log"
 )
 
 var ErrNotFound = errors.New("unexpected response code, got 404")
@@ -17,6 +16,7 @@ var ErrUnprocessableEntity = errors.New("unexpected response code, got 422")
 
 // Chainlink interface that enables interactions with a chainlink node
 type Chainlink interface {
+	URL() string
 	CreateJob(spec JobSpec) (*Job, error)
 	CreateJobRaw(spec string) (*Job, error)
 	ReadJobs() (*ResponseSlice, error)
@@ -30,6 +30,8 @@ type Chainlink interface {
 	CreateBridge(bta *BridgeTypeAttributes) error
 	ReadBridge(name string) (*BridgeType, error)
 	DeleteBridge(name string) error
+
+	ReadRunsForJob(jobID string) (*JobRunsResponse, error)
 
 	CreateOCRKey() (*OCRKey, error)
 	ReadOCRKeys() (*OCRKeys, error)
@@ -62,7 +64,12 @@ func NewChainlink(c *ChainlinkConfig, httpClient *http.Client) (Chainlink, error
 	return cl, cl.SetSessionCookie()
 }
 
-// CreateJob creates a Chainlink job based on the provided spec string
+// URL chainlink instance http url
+func (c *chainlink) URL() string {
+	return c.Config.URL
+}
+
+// CreateJobRaw creates a Chainlink job based on the provided spec string
 func (c *chainlink) CreateJobRaw(spec string) (*Job, error) {
 	job := &Job{}
 	log.Info().Str("Node URL", c.Config.URL).Msg("Creating Job")
@@ -124,6 +131,14 @@ func (c *chainlink) ReadSpec(id string) (*Response, error) {
 	log.Info().Str("Node URL", c.Config.URL).Str("ID", id).Msg("Reading Spec")
 	_, err := c.do(http.MethodGet, fmt.Sprintf("/v2/specs/%s", id), nil, specObj, http.StatusOK)
 	return specObj, err
+}
+
+// ReadRunsForJob reads all runs for a job
+func (c *chainlink) ReadRunsForJob(jobID string) (*JobRunsResponse, error) {
+	runsObj := &JobRunsResponse{}
+	log.Info().Str("Node URL", c.Config.URL).Str("JobID", jobID).Msg("Reading runs for a job")
+	_, err := c.do(http.MethodGet, fmt.Sprintf("/v2/jobs/%s/runs", jobID), nil, runsObj, http.StatusOK)
+	return runsObj, err
 }
 
 // DeleteSpec deletes a job spec with the provided ID from the Chainlink node

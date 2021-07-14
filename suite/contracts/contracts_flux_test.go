@@ -56,7 +56,8 @@ var _ = Describe("Flux monitor suite", func() {
 		log.Info().Str("Oracles", strings.Join(oracles, ",")).Msg("oracles set")
 
 		// set variable Adapter
-		adapter := tools.NewExternalAdapter()
+		adapter, err := tools.NewExternalAdapter()
+		Expect(err).ShouldNot(HaveOccurred())
 
 		// Send Flux job to chainlink nodes
 		for _, n := range clNodesAtTest {
