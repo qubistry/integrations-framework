@@ -18,7 +18,7 @@ install-deps: gomod golangci ## install necessary dependencies
 
 .PHONY: test
 test: ## run tests
-	go test -v ./... -count 1 -p 1
+	go test -v ./suite/contracts ./client -count 1 -p 1
 
 .PHONY: test
 test_volume: ## run volume tests

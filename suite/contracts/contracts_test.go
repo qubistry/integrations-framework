@@ -52,7 +52,8 @@ var _ = Describe("Chainlink Node", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// Create external Adapter, returns 5 every time
-		adapter := tools.NewExternalAdapter()
+		adapter, err := tools.NewExternalAdapter()
+		Expect(err).ShouldNot(HaveOccurred())
 
 		// Initialize bootstrap node
 		bootstrapNode := chainlinkNodes[0]
