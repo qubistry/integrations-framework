@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/smartcontractkit/integrations-framework/contracts"
 	"github.com/smartcontractkit/integrations-framework/suite"
-	"github.com/tkuchiki/faketime"
 	"math/big"
 	"time"
 
@@ -192,33 +191,6 @@ var _ = Describe("Contracts", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		err = offChainInstance.Fund(s.Wallets.Default(), nil, big.NewInt(50000000000))
 		Expect(err).ShouldNot(HaveOccurred())
-	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultOffChainAggregatorOptions()),
-	)
-
-	DescribeTable("use cron job", func(
-		initFunc client.BlockchainNetworkInit,
-		ocrOptions contracts.OffchainOptions,
-	) {
-		_, err := suite.DefaultLocalSetup(initFunc)
-		Expect(err).ShouldNot(HaveOccurred())
-		chainlinkNodes, _, err := suite.ConnectToTemplateNodes()
-		Expect(err).ShouldNot(HaveOccurred())
-
-		// set variable adapter
-		adapter := tools.NewExternalAdapter()
-
-		_, err = chainlinkNodes[0].CreateJob(&client.CronJobSpec{
-			Schedule:          "CRON_TZ=UTC */10 * * * * *",
-			ObservationSource: client.ObservationSourceSpec(adapter.InsideDockerAddr + "/five"),
-		})
-		Expect(err).ShouldNot(HaveOccurred())
-		t := time.Now()
-		oneHourLater := t.Add(time.Hour * 1)
-		f := faketime.NewFaketimeWithTime(oneHourLater)
-		f.Do()
-		time.Sleep(10 * time.Second)
-		f.Undo()
 	},
 		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultOffChainAggregatorOptions()),
 	)
