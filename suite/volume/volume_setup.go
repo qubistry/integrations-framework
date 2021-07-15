@@ -186,7 +186,7 @@ func (vt *FluxTest) roundsStartTimes() (map[string]int64, error) {
 		startTimesForContract := make([]int64, 0)
 		for _, j := range jobs {
 			node := vt.NodesByHostPort[j.Instance]
-			runs, err := node.ReadRunsForJob(j.ID)
+			runs, err := node.ReadRunsByJob(j.ID)
 			if err != nil {
 				return nil, err
 			}
