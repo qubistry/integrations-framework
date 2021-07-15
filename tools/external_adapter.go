@@ -67,7 +67,7 @@ func NewExternalAdapter() (ExternalAdapter, error) {
 }
 
 func (e *ExternalAdapter) TriggerValueChange(i int) (int, error) {
-	log.Info().Int("iteration", i).Msg("triggering new round")
+	log.Info().Int("Iteration", i).Msg("Triggering new round")
 	if i%2 == 0 {
 		_, err := SetVariableMockData(e.LocalAddr, 5)
 		if err != nil {
@@ -137,7 +137,7 @@ func five(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 
 func setVariable(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	q := r.URL.Query()
-	log.Info().Interface("query", q).Msg("setting variable answer")
+	log.Info().Interface("Query", q).Msg("Setting variable answer")
 	v := q.Get("var")
 	data, _ := strconv.Atoi(v)
 	VariableData = data

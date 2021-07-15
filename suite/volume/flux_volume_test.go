@@ -26,9 +26,9 @@ var _ = Describe("Flux monitor volume tests", func() {
 		NodePollTimePeriod:  15 * time.Second,
 		FluxOptions:         contracts.DefaultFluxAggregatorOptions(),
 	}
-	ft := NewFluxTest(spec)
+	ft, err := NewFluxTest(spec)
+	Expect(err).ShouldNot(HaveOccurred())
 	Describe("round completion times", func() {
-		promRoundTimeout := 120 * time.Second
 		currentRound := 1
 		rounds := 5
 		// just wait for the first round to settle about initial data
@@ -40,21 +40,10 @@ var _ = Describe("Flux monitor volume tests", func() {
 		Measure("Should process rounds without errors", func(b Benchmarker) {
 			blockStart, err := ft.DefaultSetup.Client.BlockNumber(context.Background())
 			Expect(err).ShouldNot(HaveOccurred())
-			// all contracts/nodes/jobs are setup at that point, triggering new round,
-			// waiting for all contracts to complete one round and get metrics from runs/on-chain
+
 			newVal, err := ft.Adapter.TriggerValueChange(currentRound)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			ctx, cancel := context.WithTimeout(context.Background(), promRoundTimeout)
-			defer cancel()
-
-			// await all nodes report round was finished
-			roundFinished, err := ft.Prom.AwaitRoundFinishedAcrossNodes(ctx, currentRound+1)
-			Expect(err).ShouldNot(HaveOccurred())
-			if !roundFinished {
-				Fail("round was not finished in time")
-			}
-			// await all round data is on chain
 			err = ft.awaitRoundFinishedOnChain(currentRound+1, newVal)
 			Expect(err).ShouldNot(HaveOccurred())
 

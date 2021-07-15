@@ -8,7 +8,6 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/rs/zerolog/log"
 	"github.com/smartcontractkit/integrations-framework/config"
-	"strconv"
 	"time"
 )
 
@@ -49,49 +48,6 @@ func NewPrometheusClient(cfg *config.PrometheusClientConfig) (*PromChecker, erro
 		API: v1.NewAPI(client),
 		Cfg: cfg,
 	}, nil
-}
-
-func (p *PromChecker) debugRoundMetrics(vec model.Vector) {
-	var metrics []FluxRoundMetrics
-	for _, m := range vec {
-		jobSpecID, _ := strconv.Atoi(string(m.Metric["job_spec_id"]))
-		metrics = append(metrics, FluxRoundMetrics{
-			Instance: string(m.Metric["instance"]),
-			JobID:    jobSpecID,
-			Value:    int(m.Value),
-		})
-	}
-	log.Debug().Interface("last_round_metrics", metrics).Msg("new round reached")
-}
-
-// AwaitRoundFinishedAcrossNodes waits for all nodes to report next round
-func (p *PromChecker) AwaitRoundFinishedAcrossNodes(ctx context.Context, roundID int) (bool, error) {
-	ticker := time.NewTicker(1 * time.Second)
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info().Msg("timeout awaiting new round on all nodes")
-			return false, nil
-		case <-ticker.C:
-			lastReportedRounds, err := p.NodesLastReportedRounds()
-			if err != nil {
-				return false, err
-			}
-			tryAgain := false
-			log.Info().Int("round_id", roundID).Msg("awaiting flux_monitor_reported_round is consistent across nodes")
-			for _, v := range lastReportedRounds {
-				if int(v.Value) != roundID {
-					tryAgain = true
-					break
-				}
-			}
-			if tryAgain {
-				continue
-			}
-			p.debugRoundMetrics(lastReportedRounds)
-			return true, nil
-		}
-	}
 }
 
 func (p *PromChecker) NodesLastReportedRounds() (model.Vector, error) {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/avast/retry-go"
 	"github.com/ethereum/go-ethereum/common"
-	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -15,6 +14,7 @@ import (
 	"github.com/smartcontractkit/integrations-framework/contracts/ethereum"
 	"github.com/smartcontractkit/integrations-framework/suite"
 	"github.com/smartcontractkit/integrations-framework/tools"
+	"golang.org/x/sync/errgroup"
 	"math/big"
 	"sync"
 	"time"
@@ -66,30 +66,33 @@ type JobByInstance struct {
 }
 
 // NewFluxTest deploys AggregatorsNum flux aggregators concurrently
-func NewFluxTest(spec *FluxTestSpec) *FluxTest {
+func NewFluxTest(spec *FluxTestSpec) (*FluxTest, error) {
 	s, err := suite.DefaultLocalSetup(spec.InitFunc)
-	Expect(err).ShouldNot(HaveOccurred())
-
+	if err != nil {
+		return nil, err
+	}
 	clNodes, nodeAddrs, err := suite.ConnectToTemplateNodes()
-	Expect(err).ShouldNot(HaveOccurred())
+	if err != nil {
+		return nil, err
+	}
 	err = suite.FundTemplateNodes(s.Client, s.Wallets, clNodes, 9e18, 0)
-	Expect(err).ShouldNot(HaveOccurred())
-
+	if err != nil {
+		return nil, err
+	}
 	s.Client.(*client.EthereumClient).BorrowedNonces(true)
-
 	adapter, err := tools.NewExternalAdapter()
-	Expect(err).ShouldNot(HaveOccurred())
+	if err != nil {
+		return nil, err
+	}
 
 	fluxInstances := make([]contracts.FluxAggregator, 0)
 	nodesByHostPort := make(map[string]client.Chainlink)
 	contractToJobsMap := make(map[string][]JobByInstance)
 	mu := &sync.Mutex{}
-	wg := &sync.WaitGroup{}
+	g := &errgroup.Group{}
 	for i := 0; i < spec.AggregatorsNum; i++ {
-		wg.Add(1)
 		deployFluxInstance(&FluxInstanceDeployment{
 			InstanceDeployment: InstanceDeployment{
-				Wg:      wg,
 				Index:   i,
 				Suite:   s,
 				Spec:    spec,
@@ -101,12 +104,17 @@ func NewFluxTest(spec *FluxTestSpec) *FluxTest {
 			NodesByHostPort:   nodesByHostPort,
 			FluxInstances:     &fluxInstances,
 			ContractToJobsMap: contractToJobsMap,
-		})
+		}, g)
 	}
-	wg.Wait()
+	err = g.Wait()
+	if err != nil {
+		return nil, err
+	}
 	prom, err := tools.NewPrometheusClient(s.Config.Prometheus)
-	Expect(err).ShouldNot(HaveOccurred())
-	log.Debug().Interface("contracts_to_jobs", contractToJobsMap).Msg("debug data for per round metrics")
+	if err != nil {
+		return nil, err
+	}
+	log.Debug().Interface("Contracts to jobs", contractToJobsMap).Msg("Debug data for per round metrics")
 	return &FluxTest{
 		Test: Test{
 			DefaultSetup:            s,
@@ -121,21 +129,25 @@ func NewFluxTest(spec *FluxTestSpec) *FluxTest {
 		NodesByHostPort:    nodesByHostPort,
 		roundsDurationData: make([]float64, 0),
 		AlreadySeenRuns:    make(map[string]bool),
-	}
+	}, nil
 }
 
 // deployFluxInstance deploy one flux instance concurrently, add jobs to all the nodes
-func deployFluxInstance(d *FluxInstanceDeployment) {
-	go func() {
-		defer d.Wg.Done()
-		log.Info().Int("instance_id", d.Index).Msg("deploying contracts instance")
+func deployFluxInstance(d *FluxInstanceDeployment, g *errgroup.Group) {
+	g.Go(func() error {
+		log.Info().Int("Instance ID", d.Index).Msg("Deploying contracts instance")
 		fluxInstance, err := d.Suite.Deployer.DeployFluxAggregatorContract(d.Suite.Wallets.Default(), d.Spec.FluxOptions)
-		Expect(err).ShouldNot(HaveOccurred())
+		if err != nil {
+			return err
+		}
 		err = fluxInstance.Fund(d.Suite.Wallets.Default(), big.NewInt(0), big.NewInt(1e18))
-		Expect(err).ShouldNot(HaveOccurred())
+		if err != nil {
+			return err
+		}
 		err = fluxInstance.UpdateAvailableFunds(context.Background(), d.Suite.Wallets.Default())
-		Expect(err).ShouldNot(HaveOccurred())
-
+		if err != nil {
+			return err
+		}
 		// set oracles and submissions
 		err = fluxInstance.SetOracles(d.Suite.Wallets.Default(),
 			contracts.SetOraclesOptions{
@@ -146,7 +158,9 @@ func deployFluxInstance(d *FluxInstanceDeployment) {
 				MaxSubmissions:     uint32(d.Spec.RequiredSubmissions),
 				RestartDelayRounds: uint32(d.Spec.RestartDelayRounds),
 			})
-		Expect(err).ShouldNot(HaveOccurred())
+		if err != nil {
+			return err
+		}
 		for _, n := range d.Nodes {
 			fluxSpec := &client.FluxMonitorJobSpec{
 				Name:            fmt.Sprintf("%s_%d", d.Spec.JobPrefix, d.Index),
@@ -158,7 +172,9 @@ func deployFluxInstance(d *FluxInstanceDeployment) {
 				ObservationSource: client.ObservationSourceSpec(d.Adapter.InsideDockerAddr + "/variable"),
 			}
 			job, err := n.CreateJob(fluxSpec)
-			Expect(err).ShouldNot(HaveOccurred())
+			if err != nil {
+				return err
+			}
 			d.FluxInstancesMu.Lock()
 			d.NodesByHostPort[n.URL()] = n
 			d.ContractToJobsMap[fluxInstance.Address()] = append(d.ContractToJobsMap[fluxInstance.Address()],
@@ -171,7 +187,8 @@ func deployFluxInstance(d *FluxInstanceDeployment) {
 		d.FluxInstancesMu.Lock()
 		*d.FluxInstances = append(*d.FluxInstances, fluxInstance)
 		d.FluxInstancesMu.Unlock()
-	}()
+		return nil
+	})
 }
 
 // runInstanceKey to record start timestamp of every run + instance
@@ -200,10 +217,9 @@ func (vt *FluxTest) roundsStartTimes() (map[string]int64, error) {
 				startTimesForContract = append(startTimesForContract, r.Attributes.CreatedAt.UnixNano()/1e6)
 			}
 		}
-		log.Debug().Interface("start_times", startTimesForContract).Str("contract", contractAddr).Send()
 		contactsStartTimes[contractAddr] = minInt64Slice(startTimesForContract)
 	}
-	log.Debug().Interface("round_start_times", contactsStartTimes).Send()
+	log.Debug().Interface("Round start times", contactsStartTimes).Send()
 	return contactsStartTimes, nil
 }
 
@@ -213,7 +229,7 @@ func (vt *FluxTest) roundsMetrics(fromBlock *big.Int, toBlock *big.Int, roundID 
 	if err != nil {
 		return err
 	}
-	hr, err := vt.getOnChainLogs(fromBlock, toBlock, roundID)
+	hr, err := vt.getOnChainLogs(fromBlock, toBlock)
 	if err != nil {
 		return err
 	}
@@ -224,14 +240,18 @@ func (vt *FluxTest) roundsMetrics(fromBlock *big.Int, toBlock *big.Int, roundID 
 	for contract := range startTimes {
 		duration := endTimes[contract] - startTimes[contract]
 		vt.roundsDurationData = append(vt.roundsDurationData, float64(duration))
-		log.Info().Str("contract", contract).Int64("round_duration_ms", duration).Send()
+		log.Info().Str("Contract", contract).Int64("Round duration ms", duration).Send()
 	}
 	return nil
 }
 
 func (vt *FluxTest) awaitRoundFinishedOnChain(roundID int, newVal int) error {
 	if err := retry.Do(func() error {
-		if !vt.checkRoundFinishedOnChain(roundID, newVal) {
+		finished, err := vt.checkRoundFinishedOnChain(roundID, newVal)
+		if err != nil {
+			return err
+		}
+		if !finished {
 			return errors.New("round is not finished")
 		}
 		return nil
@@ -252,27 +272,26 @@ func (vt *FluxTest) debugRoundTuple(rounds []*contracts.FluxAggregatorData) {
 			Val:     r.LatestRoundData.Answer.Int64(),
 		})
 	}
-	log.Debug().Interface("rounds_on_chain", roundValsArr).Msg("last rounds on chain")
+	log.Debug().Interface("Rounds values on chain", roundValsArr).Msg("Last rounds on chain")
 }
 
-func (vt *FluxTest) checkRoundFinishedOnChain(roundID int, newVal int) bool {
-	log.Debug().Int("round_id", roundID).Msg("checking round completion on chain")
+func (vt *FluxTest) checkRoundFinishedOnChain(roundID int, newVal int) (bool, error) {
+	log.Debug().Int("Round ID", roundID).Msg("Checking round completion on chain")
 	var rounds []*contracts.FluxAggregatorData
 	for _, flux := range *vt.FluxInstances {
 		cd, err := flux.GetContractData(context.Background())
 		if err != nil {
-			log.Err(err).Msg("error checking flux last round")
-			return false
+			return false, err
 		}
 		rounds = append(rounds, cd)
 	}
 	vt.debugRoundTuple(rounds)
 	for _, r := range rounds {
 		if r.LatestRoundData.RoundId.Int64() != int64(roundID) || r.LatestRoundData.Answer.Int64() != int64(newVal) {
-			return false
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
 
 // roundEndTimes counts submissions for round, when all required submission is found, saves last block_timestamp for contract
@@ -281,7 +300,6 @@ func (vt *FluxTest) roundEndTimes(hr *ethlog.HistoryResult, expectedRound int, s
 	submitsMap := make(map[string]int)
 	for _, block := range hr.History {
 		if len(block["transactions"].([]ethlog.ParsedTx)) == 0 {
-			//log.Debug().Msg("empty block")
 			continue
 		}
 		// for every tx search event with matching round id, happened in particular contract
@@ -306,12 +324,12 @@ func (vt *FluxTest) roundEndTimes(hr *ethlog.HistoryResult, expectedRound int, s
 			}
 		}
 	}
-	log.Debug().Interface("round_end_block_times", endTimesMap).Send()
+	log.Debug().Interface("Round end block times", endTimesMap).Send()
 	return endTimesMap, nil
 }
 
 // getOnChainLogs get all block data for test interval
-func (vt *FluxTest) getOnChainLogs(from *big.Int, to *big.Int, roundID int) (*ethlog.HistoryResult, error) {
+func (vt *FluxTest) getOnChainLogs(from *big.Int, to *big.Int) (*ethlog.HistoryResult, error) {
 	contractSearchData := make([]ethlog.ContractData, 0)
 	for contractAddr := range vt.ContractsToJobsMap {
 		contractSearchData = append(contractSearchData, ethlog.ContractData{

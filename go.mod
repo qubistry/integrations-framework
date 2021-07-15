@@ -30,5 +30,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.6 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e // indirect
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 )

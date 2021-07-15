@@ -50,12 +50,12 @@ type PercentileReport struct {
 }
 
 func (t *Test) reportMetrics(m *PercentileReport) {
-	log.Info().Float64("round_duration_ms_MAX", m.Max).Send()
-	log.Info().Float64("round_duration_ms_P99", m.P99).Send()
-	log.Info().Float64("round_duration_ms_P95", m.P95).Send()
-	log.Info().Float64("round_duration_ms_P90", m.P90).Send()
-	log.Info().Float64("round_duration_ms_P50", m.P50).Send()
-	log.Info().Float64("round_duration_ms_std_dev", m.StdDev).Send()
+	log.Info().Float64("Round duration ms MAX", m.Max).Send()
+	log.Info().Float64("Round duration ms P99", m.P99).Send()
+	log.Info().Float64("Round duration ms P95", m.P95).Send()
+	log.Info().Float64("Round duration ms P90", m.P90).Send()
+	log.Info().Float64("Round duration ms P50", m.P50).Send()
+	log.Info().Float64("Round duration ms standard deviation", m.StdDev).Send()
 }
 
 // CalculatePercentiles calculates percentiles for arbitrary float64 data
