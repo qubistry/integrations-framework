@@ -30,7 +30,7 @@ var _ = Describe("Cronjob suite", func() {
 		})
 		Expect(err).ShouldNot(HaveOccurred())
 		err = retry.Do(func() error {
-			jobRuns, err := chainlinkNodes[0].ReadRunsForJob(job.Data.ID)
+			jobRuns, err := chainlinkNodes[0].ReadRunsByJob(job.Data.ID)
 			if err != nil {
 				return err
 			}
