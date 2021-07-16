@@ -78,7 +78,7 @@ var _ = Describe("Flux monitor suite", func() {
 		{
 			data, err := fluxInstance.GetContractData(context.Background())
 			Expect(err).ShouldNot(HaveOccurred())
-			log.Info().Interface("data", data).Msg("round data")
+			log.Info().Interface("Data", data).Msg("Round data")
 			Expect(len(data.Oracles)).Should(Equal(3))
 			Expect(data.LatestRoundData.Answer.Int64()).Should(Equal(int64(tools.VariableData)))
 			Expect(data.LatestRoundData.RoundId.Int64()).Should(Equal(int64(1)))
@@ -99,7 +99,7 @@ var _ = Describe("Flux monitor suite", func() {
 			Expect(data.LatestRoundData.AnsweredInRound.Int64()).Should(Equal(int64(2)))
 			Expect(data.AvailableFunds.Int64()).Should(Equal(int64(999999999999999994)))
 			Expect(data.AllocatedFunds.Int64()).Should(Equal(int64(6)))
-			log.Info().Interface("data", data).Msg("round data")
+			log.Info().Interface("Data", data).Msg("Round data")
 		}
 		// check available payments for oracles
 		for _, oracleAddr := range oraclesAtTest {

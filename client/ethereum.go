@@ -281,8 +281,8 @@ func (e *EthereumClient) WaitForTransaction(transactionHash common.Hash) error {
 	timeout := e.Network.Config().Timeout
 	confirmations := 0
 
-	//txHashTicker := time.NewTicker(200 * time.Millisecond)
-	//defer txHashTicker.Stop()
+	txHashTicker := time.NewTicker(200 * time.Millisecond)
+	defer txHashTicker.Stop()
 
 	for {
 		select {
@@ -292,13 +292,14 @@ func (e *EthereumClient) WaitForTransaction(transactionHash common.Hash) error {
 			// FIXME: for concurrent mode
 			// FIXME: need to be refactored as a background subscriber for blocks, checking confirmations,
 			// FIXME: puts tx_hash into a map, others polling for a tx_hash check
+			// FIXME: also see comment below, it's not working for Hardhat network
 			minConfirmations := e.Network.Config().MinimumConfirmations
 
 			block, err := e.Client.BlockByNumber(context.Background(), header.Number)
 			if err != nil {
 				return err
 			}
-			confirmationLog := log.Info().Str("Network", e.Network.Config().Name).
+			confirmationLog := log.Debug().Str("Network", e.Network.Config().Name).
 				Str("Block Hash", block.Hash().Hex()).
 				Str("Block Number", block.Number().String()).Str("Tx Hash", transactionHash.Hex()).
 				Int("Minimum Confirmations", minConfirmations).
@@ -321,29 +322,29 @@ func (e *EthereumClient) WaitForTransaction(transactionHash common.Hash) error {
 			} else {
 				confirmationLog.Msg("Waiting on minimum confirmations")
 			}
-		//case <-txHashTicker.C:
-		//	// FIXME: polling tx_hash as a temporal solution
-		//	minConfirmations := e.Network.Config().MinimumConfirmations
-		//	confirmationLog := log.Debug().Str("Network", e.Network.Config().Name).
-		//		Str("Tx Hash", transactionHash.Hex()).
-		//		Int("Minimum Confirmations", minConfirmations).
-		//		Int("Total Confirmations", confirmations)
-		//	isConfirmed, err := e.isTxConfirmed(transactionHash)
-		//	if err != nil {
-		//		return err
-		//	} else if !isConfirmed {
-		//		continue
-		//	}
-		//	confirmations++
-		//	confirmationLog.Msg("Transaction confirmed, waiting on confirmations")
-		//	if confirmations >= minConfirmations {
-		//		confirmationLog.Msg("Minimum confirmations met")
-		//		return err
-		//	} else {
-		//		confirmationLog.Msg("Waiting on minimum confirmations")
-		//	}
+		case <-txHashTicker.C:
+			// TODO: remove that when hardhat subscription will be fixed
+			minConfirmations := e.Network.Config().MinimumConfirmations
+			confirmationLog := log.Debug().Str("Network", e.Network.Config().Name).
+				Str("Tx Hash", transactionHash.Hex()).
+				Int("Minimum Confirmations", minConfirmations).
+				Int("Total Confirmations", confirmations)
+			isConfirmed, err := e.isTxConfirmed(transactionHash)
+			if err != nil {
+				return err
+			} else if !isConfirmed {
+				continue
+			}
+			confirmations++
+			confirmationLog.Msg("Transaction confirmed, waiting on confirmations")
+			if confirmations >= minConfirmations {
+				confirmationLog.Msg("Minimum confirmations met")
+				return err
+			} else {
+				confirmationLog.Msg("Waiting on minimum confirmations")
+			}
 		case <-time.After(timeout):
-			log.Debug().Msg("tx waiting timeout reached")
+			log.Debug().Msg("TX waiting timeout reached")
 			isConfirmed, err := e.isTxConfirmed(transactionHash)
 			if err != nil {
 				return err

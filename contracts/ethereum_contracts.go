@@ -13,6 +13,7 @@ import (
 	ocrConfigHelper "github.com/smartcontractkit/libocr/offchainreporting/confighelper"
 	ocrTypes "github.com/smartcontractkit/libocr/offchainreporting/types"
 	"math/big"
+	"time"
 )
 
 // EthereumFluxAggregator represents the basic flux aggregation contract
@@ -21,6 +22,55 @@ type EthereumFluxAggregator struct {
 	fluxAggregator *ethereum.FluxAggregator
 	callerWallet   client.BlockchainWallet
 	address        *common.Address
+}
+
+func (f *EthereumFluxAggregator) FilterRoundSubmissions(ctx context.Context, submissions int, submissionVal *big.Int, roundID int) (int64, error) {
+	iter, err := f.fluxAggregator.FilterSubmissionReceived(&bind.FilterOpts{Context: ctx}, []*big.Int{submissionVal}, []uint32{uint32(roundID)}, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer iter.Close()
+	submissionsCount := 0
+	if iter.Event != nil {
+		submissionsCount += 1
+	}
+	for iter.Next() {
+		submissionsCount += 1
+	}
+	if submissionsCount == submissions {
+		bn := iter.Event.Raw.BlockNumber
+		h, err := f.client.Client.HeaderByNumber(ctx, big.NewInt(int64(bn)))
+		if err != nil {
+			return 0, err
+		}
+		log.Debug().Str("Contract", f.address.Hex()).Msg("All submissions received")
+		// milliseconds
+		return int64(h.Time * 1000), nil
+	}
+	return 0, nil
+}
+
+// AwaitRoundSubmissions awaits for all submissions required for a round
+func (f *EthereumFluxAggregator) AwaitRoundSubmissions(ctx context.Context, submissions int, submissionVal *big.Int, roundID int) (int64, error) {
+	ch := make(chan *ethereum.FluxAggregatorSubmissionReceived)
+	_, err := f.fluxAggregator.WatchSubmissionReceived(&bind.WatchOpts{Context: ctx}, ch, []*big.Int{submissionVal}, []uint32{uint32(roundID)}, nil)
+	if err != nil {
+		return 0, err
+	}
+	submissionsCount := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return 0, errors.New("submissions timeout")
+		case <-ch:
+			submissionsCount += 1
+			if submissionsCount == submissions {
+				log.Debug().Str("Contract", f.address.Hex()).Msg("All submissions received")
+				// milliseconds
+				return time.Now().UnixNano() / 1e6, nil
+			}
+		}
+	}
 }
 
 func (f *EthereumFluxAggregator) Address() string {
@@ -123,7 +173,7 @@ func (f *EthereumFluxAggregator) AwaitNextRoundFinalized(ctx context.Context) er
 	if err != nil {
 		return err
 	}
-	log.Info().Int64("round", lr.Int64()).Msg("awaiting next round after")
+	log.Info().Int64("Round", lr.Int64()).Msg("Awaiting next round after")
 	if err := retry.Do(func() error {
 		newRound, err := f.LatestRound(ctx)
 		if err != nil {

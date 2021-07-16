@@ -23,13 +23,12 @@ require (
 	github.com/prometheus/common v0.26.0
 	github.com/rs/zerolog v1.23.0
 	github.com/shirou/gopsutil v3.21.6+incompatible // indirect
-	github.com/skudasov/ethlog v0.0.3
 	github.com/smartcontractkit/libocr v0.0.0-20210604141828-45d17f043949
 	github.com/spf13/viper v1.7.1
 	github.com/status-im/keycard-go v0.0.0-20200402102358-957c09536969 // indirect
 	github.com/tklauser/go-sysconf v0.3.6 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e // indirect
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/protobuf v1.27.1 // indirect
 )

@@ -5,7 +5,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/montanaflynn/stats"
 	"github.com/rs/zerolog/log"
-	"github.com/skudasov/ethlog/ethlog"
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/suite"
 	"github.com/smartcontractkit/integrations-framework/tools"
@@ -36,7 +35,6 @@ type Test struct {
 	Nodes                   []client.Chainlink
 	Adapter                 tools.ExternalAdapter
 	Prom                    *tools.PromChecker
-	EthLog                  *ethlog.EthLog
 }
 
 // PercentileReport common percentile report

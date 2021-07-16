@@ -6,12 +6,9 @@ import (
 	"github.com/avast/retry-go"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/skudasov/ethlog/ethlog"
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/contracts"
-	"github.com/smartcontractkit/integrations-framework/contracts/ethereum"
 	"github.com/smartcontractkit/integrations-framework/suite"
 	"github.com/smartcontractkit/integrations-framework/tools"
 	"golang.org/x/sync/errgroup"
@@ -36,7 +33,7 @@ type FluxTestSpec struct {
 type FluxTest struct {
 	Test
 	// round durations, calculated as a difference from earliest chainlink run for contract,
-	//until all confirmations found on-chain (block_timestamp)
+	// until all confirmations found on-chain (block_timestamp)
 	roundsDurationData []float64
 	FluxInstances      *[]contracts.FluxAggregator
 	ContractsToJobsMap map[string][]JobByInstance
@@ -122,7 +119,6 @@ func NewFluxTest(spec *FluxTestSpec) (*FluxTest, error) {
 			Nodes:                   clNodes,
 			Adapter:                 adapter,
 			Prom:                    prom,
-			EthLog:                  ethlog.NewEthLog(s.Client.(*client.EthereumClient).Client, zerolog.InfoLevel),
 		},
 		FluxInstances:      &fluxInstances,
 		ContractsToJobsMap: contractToJobsMap,
@@ -197,8 +193,8 @@ func (vt *FluxTest) runInstanceKey(inst string, runID string) string {
 }
 
 // roundsStartTimes gets run start time for every contract, adds to already seen runs
-func (vt *FluxTest) roundsStartTimes() (map[string]int64, error) {
-	contactsStartTimes := make(map[string]int64)
+func (vt *FluxTest) roundsStartTimes() (map[string]float64, error) {
+	contactsStartTimes := make(map[string]float64)
 	for contractAddr, jobs := range vt.ContractsToJobsMap {
 		startTimesForContract := make([]int64, 0)
 		for _, j := range jobs {
@@ -217,37 +213,107 @@ func (vt *FluxTest) roundsStartTimes() (map[string]int64, error) {
 				startTimesForContract = append(startTimesForContract, r.Attributes.CreatedAt.UnixNano()/1e6)
 			}
 		}
-		contactsStartTimes[contractAddr] = minInt64Slice(startTimesForContract)
+		contactsStartTimes[contractAddr] = float64(minInt64Slice(startTimesForContract))
 	}
 	log.Debug().Interface("Round start times", contactsStartTimes).Send()
 	return contactsStartTimes, nil
 }
 
-// roundsMetrics get start times from runs via API, count submissions on-chain and get block time when round ends
-func (vt *FluxTest) roundsMetrics(fromBlock *big.Int, toBlock *big.Int, roundID int, submissions int) error {
+// awaitAllRoundsSubmissionsEvents awaits all submission events for a round
+func (vt *FluxTest) awaitAllRoundsSubmissionsEvents(ctx context.Context, roundID int, submissions int, submissionVal *big.Int) (map[string]float64, error) {
+	c, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+	g, gctx := errgroup.WithContext(c)
+
+	mu := &sync.Mutex{}
+	endTimes := make(map[string]float64)
+	for _, fi := range *vt.FluxInstances {
+		fi := fi
+		g.Go(func() error {
+			endTime, err := fi.AwaitRoundSubmissions(gctx, submissions, submissionVal, roundID)
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			endTimes[fi.Address()] = float64(endTime)
+			return nil
+		})
+	}
+	err := g.Wait()
+	if err != nil {
+		return nil, err
+	}
+	return endTimes, nil
+}
+
+func (vt *FluxTest) getAllRoundsSubmissionsEvents(ctx context.Context, roundID int, submissions int, submissionVal *big.Int) (map[string]float64, error) {
+	c, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+	g, gctx := errgroup.WithContext(c)
+
+	mu := &sync.Mutex{}
+	endTimes := make(map[string]float64)
+	for _, fi := range *vt.FluxInstances {
+		fi := fi
+		g.Go(func() error {
+			endTime, err := fi.FilterRoundSubmissions(gctx, submissions, submissionVal, roundID)
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			endTimes[fi.Address()] = float64(endTime)
+			return nil
+		})
+	}
+	err := g.Wait()
+	if err != nil {
+		return nil, err
+	}
+	return endTimes, nil
+}
+
+// roundsMetrics gets start times from runs via API, awaits submissions for each contract and get round end times
+func (vt *FluxTest) roundsMetrics(roundID int, submissions int, submissionVal *big.Int) error {
+	//endTimes, err := vt.awaitAllRoundsSubmissionsEvents(context.Background(), roundID, submissions, submissionVal)
+	//if err != nil {
+	//	return err
+	//}
 	startTimes, err := vt.roundsStartTimes()
 	if err != nil {
 		return err
 	}
-	hr, err := vt.getOnChainLogs(fromBlock, toBlock)
-	if err != nil {
-		return err
-	}
-	endTimes, err := vt.roundEndTimes(hr, roundID, submissions)
+	endTimes, err := vt.getAllRoundsSubmissionsEvents(context.Background(), roundID, submissions, submissionVal)
 	if err != nil {
 		return err
 	}
 	for contract := range startTimes {
 		duration := endTimes[contract] - startTimes[contract]
-		vt.roundsDurationData = append(vt.roundsDurationData, float64(duration))
-		log.Info().Str("Contract", contract).Int64("Round duration ms", duration).Send()
+		vt.roundsDurationData = append(vt.roundsDurationData, duration)
+		log.Info().Str("Contract", contract).Float64("Round duration ms", duration).Send()
 	}
 	return nil
 }
 
-func (vt *FluxTest) awaitRoundFinishedOnChain(roundID int, newVal int) error {
+// skipFirstRound skip first round because it's unreliable with parallel deployment
+func (vt *FluxTest) skipFirstRound() error {
+	// just wait for the first round to settle about initial data
+	err := vt.checkRoundDataOnChain(1, tools.VariableData)
+	if err != nil {
+		return err
+	}
+	_, err = vt.roundsStartTimes()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRoundDataOnChain check that ContractData about last round is correct
+func (vt *FluxTest) checkRoundDataOnChain(roundID int, newVal int) error {
 	if err := retry.Do(func() error {
-		finished, err := vt.checkRoundFinishedOnChain(roundID, newVal)
+		finished, err := vt.checkContractData(roundID, newVal)
 		if err != nil {
 			return err
 		}
@@ -261,21 +327,7 @@ func (vt *FluxTest) awaitRoundFinishedOnChain(roundID int, newVal int) error {
 	return nil
 }
 
-func (vt *FluxTest) debugRoundTuple(rounds []*contracts.FluxAggregatorData) {
-	roundValsArr := make([]roundVals, 0)
-	for _, r := range rounds {
-		if r == nil {
-			continue
-		}
-		roundValsArr = append(roundValsArr, roundVals{
-			RoundID: r.LatestRoundData.RoundId.Int64(),
-			Val:     r.LatestRoundData.Answer.Int64(),
-		})
-	}
-	log.Debug().Interface("Rounds values on chain", roundValsArr).Msg("Last rounds on chain")
-}
-
-func (vt *FluxTest) checkRoundFinishedOnChain(roundID int, newVal int) (bool, error) {
+func (vt *FluxTest) checkContractData(roundID int, newVal int) (bool, error) {
 	log.Debug().Int("Round ID", roundID).Msg("Checking round completion on chain")
 	var rounds []*contracts.FluxAggregatorData
 	for _, flux := range *vt.FluxInstances {
@@ -294,60 +346,16 @@ func (vt *FluxTest) checkRoundFinishedOnChain(roundID int, newVal int) (bool, er
 	return true, nil
 }
 
-// roundEndTimes counts submissions for round, when all required submission is found, saves last block_timestamp for contract
-func (vt *FluxTest) roundEndTimes(hr *ethlog.HistoryResult, expectedRound int, submitsRequired int) (map[string]int64, error) {
-	endTimesMap := make(map[string]int64)
-	submitsMap := make(map[string]int)
-	for _, block := range hr.History {
-		if len(block["transactions"].([]ethlog.ParsedTx)) == 0 {
+func (vt *FluxTest) debugRoundTuple(rounds []*contracts.FluxAggregatorData) {
+	roundValsArr := make([]roundVals, 0)
+	for _, r := range rounds {
+		if r == nil {
 			continue
 		}
-		// for every tx search event with matching round id, happened in particular contract
-		for _, tx := range block["transactions"].([]ethlog.ParsedTx) {
-			for _, event := range tx["events"].([]ethlog.ParsedEvent) {
-				data := event["event_data"].(ethlog.RawParsedEventData)
-				if data["round"] == nil {
-					continue
-				}
-				addr := event["event_address"].(common.Address)
-				// identifying submission by "round" field
-				if int(data["round"].(uint32)) == expectedRound {
-					submitsMap[addr.Hex()] += 1
-				}
-				if submitsMap[addr.Hex()] > submitsRequired {
-					return nil, errors.New(fmt.Sprintf("more that required submits found for contract: %s", addr.Hex()))
-				}
-				if submitsMap[addr.Hex()] == submitsRequired {
-					// milliseconds
-					endTimesMap[addr.Hex()] = int64(block["block_time"].(uint64) * 1000)
-				}
-			}
-		}
-	}
-	log.Debug().Interface("Round end block times", endTimesMap).Send()
-	return endTimesMap, nil
-}
-
-// getOnChainLogs get all block data for test interval
-func (vt *FluxTest) getOnChainLogs(from *big.Int, to *big.Int) (*ethlog.HistoryResult, error) {
-	contractSearchData := make([]ethlog.ContractData, 0)
-	for contractAddr := range vt.ContractsToJobsMap {
-		contractSearchData = append(contractSearchData, ethlog.ContractData{
-			Name:    "flux_aggregator",
-			ABI:     ethereum.FluxAggregatorABI,
-			Address: common.HexToAddress(contractAddr),
+		roundValsArr = append(roundValsArr, roundVals{
+			RoundID: r.LatestRoundData.RoundId.Int64(),
+			Val:     r.LatestRoundData.Answer.Int64(),
 		})
 	}
-	bhConfig := &ethlog.BlockHistoryConfig{
-		FromBlock:     from,
-		ToBlock:       to,
-		Format:        ethlog.FormatYAML,
-		Rewrite:       true,
-		ContractsData: contractSearchData,
-	}
-	blocksHistory, err := vt.EthLog.RequestBlocksHistory(bhConfig)
-	if err != nil {
-		return nil, err
-	}
-	return blocksHistory, nil
+	log.Debug().Interface("Rounds values on chain", roundValsArr).Msg("Last rounds on chain")
 }
