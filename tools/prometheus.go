@@ -61,10 +61,6 @@ func (p *PromChecker) NodesLastReportedRoundsTs() (model.Vector, error) {
 	return val.(model.Vector), nil
 }
 
-func (p *PromChecker) toMs(val model.SampleValue) int64 {
-	return time.Duration(int64(val)).Milliseconds()
-}
-
 func (p *PromChecker) printWarns(warns v1.Warnings) {
 	if len(warns) > 0 {
 		log.Info().Interface("Warnings", warns).Msg("Warnings found when performing prometheus query")

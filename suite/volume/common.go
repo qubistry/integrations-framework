@@ -41,23 +41,25 @@ type Test struct {
 type PercentileReport struct {
 	StdDev float64
 	Max    float64
+	Min    float64
 	P99    float64
 	P95    float64
 	P90    float64
 	P50    float64
 }
 
-func (t *Test) reportMetrics(m *PercentileReport) {
+func (t *Test) printMetrics(m *PercentileReport) {
 	log.Info().Float64("Round duration ms MAX", m.Max).Send()
 	log.Info().Float64("Round duration ms P99", m.P99).Send()
 	log.Info().Float64("Round duration ms P95", m.P95).Send()
 	log.Info().Float64("Round duration ms P90", m.P90).Send()
 	log.Info().Float64("Round duration ms P50", m.P50).Send()
+	log.Info().Float64("Round duration ms MIN", m.Min).Send()
 	log.Info().Float64("Round duration ms standard deviation", m.StdDev).Send()
 }
 
-// CalculatePercentiles calculates percentiles for arbitrary float64 data
-func (t *Test) CalculatePercentiles(data []float64) (*PercentileReport, error) {
+// calculatePercentiles calculates percentiles for arbitrary float64 data
+func (t *Test) calculatePercentiles(data []float64) (*PercentileReport, error) {
 	perc99, err := stats.Percentile(data, 99)
 	if err != nil {
 		return nil, err
@@ -78,11 +80,15 @@ func (t *Test) CalculatePercentiles(data []float64) (*PercentileReport, error) {
 	if err != nil {
 		return nil, err
 	}
+	min, err := stats.Min(data)
+	if err != nil {
+		return nil, err
+	}
 	stdDev, err := stats.StandardDeviation(data)
 	if err != nil {
 		return nil, err
 	}
-	return &PercentileReport{P99: perc99, P95: perc95, P90: perc90, P50: perc50, Max: max, StdDev: stdDev}, nil
+	return &PercentileReport{P99: perc99, P95: perc95, P90: perc90, P50: perc50, Max: max, Min: min, StdDev: stdDev}, nil
 }
 
 func minInt64Slice(v []int64) (m int64) {
@@ -91,6 +97,18 @@ func minInt64Slice(v []int64) (m int64) {
 	}
 	for i := 1; i < len(v); i++ {
 		if v[i] < m {
+			m = v[i]
+		}
+	}
+	return
+}
+
+func maxInt64Slice(v []int64) (m int64) {
+	if len(v) > 0 {
+		m = v[0]
+	}
+	for i := 1; i < len(v); i++ {
+		if v[i] > m {
 			m = v[i]
 		}
 	}

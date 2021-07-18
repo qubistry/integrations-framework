@@ -3,6 +3,7 @@ package contracts
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"github.com/avast/retry-go"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -13,7 +14,6 @@ import (
 	ocrConfigHelper "github.com/smartcontractkit/libocr/offchainreporting/confighelper"
 	ocrTypes "github.com/smartcontractkit/libocr/offchainreporting/types"
 	"math/big"
-	"time"
 )
 
 // EthereumFluxAggregator represents the basic flux aggregation contract
@@ -24,6 +24,7 @@ type EthereumFluxAggregator struct {
 	address        *common.Address
 }
 
+// FilterRoundSubmissions filters rounds submissions, if there isn't enogh submissions found returns and error
 func (f *EthereumFluxAggregator) FilterRoundSubmissions(ctx context.Context, submissions int, submissionVal *big.Int, roundID int) (int64, error) {
 	iter, err := f.fluxAggregator.FilterSubmissionReceived(&bind.FilterOpts{Context: ctx}, []*big.Int{submissionVal}, []uint32{uint32(roundID)}, nil)
 	if err != nil {
@@ -37,42 +38,23 @@ func (f *EthereumFluxAggregator) FilterRoundSubmissions(ctx context.Context, sub
 	for iter.Next() {
 		submissionsCount += 1
 	}
+	if submissionsCount > submissions {
+		return 0, errors.New(fmt.Sprintf("more submissions found than expected for contract: %s", f.address.Hex()))
+	}
 	if submissionsCount == submissions {
 		bn := iter.Event.Raw.BlockNumber
 		h, err := f.client.Client.HeaderByNumber(ctx, big.NewInt(int64(bn)))
 		if err != nil {
 			return 0, err
 		}
-		log.Debug().Str("Contract", f.address.Hex()).Msg("All submissions received")
+		log.Debug().Str("Contract", f.address.Hex()).Msg("All submissions found")
 		// milliseconds
 		return int64(h.Time * 1000), nil
 	}
-	return 0, nil
+	return 0, errors.New(fmt.Sprintf("not enough submissions for contract: %s", f.address.Hex()))
 }
 
-// AwaitRoundSubmissions awaits for all submissions required for a round
-func (f *EthereumFluxAggregator) AwaitRoundSubmissions(ctx context.Context, submissions int, submissionVal *big.Int, roundID int) (int64, error) {
-	ch := make(chan *ethereum.FluxAggregatorSubmissionReceived)
-	_, err := f.fluxAggregator.WatchSubmissionReceived(&bind.WatchOpts{Context: ctx}, ch, []*big.Int{submissionVal}, []uint32{uint32(roundID)}, nil)
-	if err != nil {
-		return 0, err
-	}
-	submissionsCount := 0
-	for {
-		select {
-		case <-ctx.Done():
-			return 0, errors.New("submissions timeout")
-		case <-ch:
-			submissionsCount += 1
-			if submissionsCount == submissions {
-				log.Debug().Str("Contract", f.address.Hex()).Msg("All submissions received")
-				// milliseconds
-				return time.Now().UnixNano() / 1e6, nil
-			}
-		}
-	}
-}
-
+// Address ethereum contract address
 func (f *EthereumFluxAggregator) Address() string {
 	return f.address.Hex()
 }

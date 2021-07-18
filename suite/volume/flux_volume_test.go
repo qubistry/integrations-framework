@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/contracts"
+	"github.com/smartcontractkit/integrations-framework/tools"
 	"math/big"
 	"time"
 )
@@ -18,11 +19,11 @@ var _ = Describe("Flux monitor volume tests", func() {
 				InitFunc:                client.NewHardhatNetwork,
 				OnChainCheckAttemptsOpt: retry.Attempts(120),
 			},
-			AggregatorsNum:      20,
+			AggregatorsNum:      100,
 			RequiredSubmissions: 5,
 			RestartDelayRounds:  0,
 			JobPrefix:           jobPrefix,
-			NodePollTimePeriod:  30 * time.Second,
+			NodePollTimePeriod:  15 * time.Second,
 			FluxOptions:         contracts.DefaultFluxAggregatorOptions(),
 		}
 		ft, err := NewFluxTest(spec)
@@ -31,7 +32,7 @@ var _ = Describe("Flux monitor volume tests", func() {
 		currentRound := 1
 		rounds := 5
 
-		err = ft.skipFirstRound()
+		err = ft.checkRoundDataOnChain(currentRound, tools.VariableData)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		Measure("Round completion time percentiles", func(b Benchmarker) {
@@ -56,9 +57,9 @@ var _ = Describe("Flux monitor volume tests", func() {
 		}, rounds)
 
 		AfterSuite(func() {
-			percs, err := ft.CalculatePercentiles(ft.roundsDurationData)
+			percs, err := ft.calculatePercentiles(ft.roundsDurationData)
 			Expect(err).ShouldNot(HaveOccurred())
-			ft.reportMetrics(percs)
+			ft.printMetrics(percs)
 		})
 	})
 })

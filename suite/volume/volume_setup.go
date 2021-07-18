@@ -187,56 +187,34 @@ func deployFluxInstance(d *FluxInstanceDeployment, g *errgroup.Group) {
 	})
 }
 
-// runInstanceKey to record start timestamp of every run + instance
-func (vt *FluxTest) runInstanceKey(inst string, runID string) string {
-	return fmt.Sprintf("%s:%s", inst, runID)
-}
-
-// roundsStartTimes gets run start time for every contract, adds to already seen runs
+// roundsStartTimes gets run start time for every contract
 func (vt *FluxTest) roundsStartTimes() (map[string]float64, error) {
+	mu := &sync.Mutex{}
+	g := &errgroup.Group{}
 	contactsStartTimes := make(map[string]float64)
 	for contractAddr, jobs := range vt.ContractsToJobsMap {
-		startTimesForContract := make([]int64, 0)
-		for _, j := range jobs {
-			node := vt.NodesByHostPort[j.Instance]
-			runs, err := node.ReadRunsByJob(j.ID)
-			if err != nil {
-				return nil, err
-			}
-			for _, r := range runs.Data {
-				key := vt.runInstanceKey(j.Instance, r.ID)
-				if _, ok := vt.AlreadySeenRuns[key]; ok {
-					continue
-				}
-				vt.AlreadySeenRuns[key] = true
-				// milliseconds
-				startTimesForContract = append(startTimesForContract, r.Attributes.CreatedAt.UnixNano()/1e6)
-			}
-		}
-		contactsStartTimes[contractAddr] = float64(minInt64Slice(startTimesForContract))
-	}
-	log.Debug().Interface("Round start times", contactsStartTimes).Send()
-	return contactsStartTimes, nil
-}
-
-// awaitAllRoundsSubmissionsEvents awaits all submission events for a round
-func (vt *FluxTest) awaitAllRoundsSubmissionsEvents(ctx context.Context, roundID int, submissions int, submissionVal *big.Int) (map[string]float64, error) {
-	c, cancel := context.WithTimeout(ctx, 120*time.Second)
-	defer cancel()
-	g, gctx := errgroup.WithContext(c)
-
-	mu := &sync.Mutex{}
-	endTimes := make(map[string]float64)
-	for _, fi := range *vt.FluxInstances {
-		fi := fi
+		contractAddr := contractAddr
+		jobs := jobs
 		g.Go(func() error {
-			endTime, err := fi.AwaitRoundSubmissions(gctx, submissions, submissionVal, roundID)
-			if err != nil {
-				return err
+			startTimesAcrossNodes := make([]int64, 0)
+			for _, j := range jobs {
+				// get node for a job
+				node := vt.NodesByHostPort[j.Instance]
+				runs, err := node.ReadRunsByJob(j.ID)
+				if err != nil {
+					return err
+				}
+				runsStartTimes := make([]int64, 0)
+				for _, r := range runs.Data {
+					runsStartTimes = append(runsStartTimes, r.Attributes.CreatedAt.UnixNano()/1e6) // milliseconds
+				}
+				lastRunStartTime := maxInt64Slice(runsStartTimes)
+				startTimesAcrossNodes = append(startTimesAcrossNodes, lastRunStartTime)
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			endTimes[fi.Address()] = float64(endTime)
+			// earliest start across nodes for contract
+			contactsStartTimes[contractAddr] = float64(minInt64Slice(startTimesAcrossNodes))
 			return nil
 		})
 	}
@@ -244,13 +222,12 @@ func (vt *FluxTest) awaitAllRoundsSubmissionsEvents(ctx context.Context, roundID
 	if err != nil {
 		return nil, err
 	}
-	return endTimes, nil
+	log.Debug().Interface("Round start times", contactsStartTimes).Send()
+	return contactsStartTimes, nil
 }
 
 func (vt *FluxTest) getAllRoundsSubmissionsEvents(ctx context.Context, roundID int, submissions int, submissionVal *big.Int) (map[string]float64, error) {
-	c, cancel := context.WithTimeout(ctx, 120*time.Second)
-	defer cancel()
-	g, gctx := errgroup.WithContext(c)
+	g, gctx := errgroup.WithContext(ctx)
 
 	mu := &sync.Mutex{}
 	endTimes := make(map[string]float64)
@@ -276,10 +253,6 @@ func (vt *FluxTest) getAllRoundsSubmissionsEvents(ctx context.Context, roundID i
 
 // roundsMetrics gets start times from runs via API, awaits submissions for each contract and get round end times
 func (vt *FluxTest) roundsMetrics(roundID int, submissions int, submissionVal *big.Int) error {
-	//endTimes, err := vt.awaitAllRoundsSubmissionsEvents(context.Background(), roundID, submissions, submissionVal)
-	//if err != nil {
-	//	return err
-	//}
 	startTimes, err := vt.roundsStartTimes()
 	if err != nil {
 		return err
@@ -292,20 +265,6 @@ func (vt *FluxTest) roundsMetrics(roundID int, submissions int, submissionVal *b
 		duration := endTimes[contract] - startTimes[contract]
 		vt.roundsDurationData = append(vt.roundsDurationData, duration)
 		log.Info().Str("Contract", contract).Float64("Round duration ms", duration).Send()
-	}
-	return nil
-}
-
-// skipFirstRound skip first round because it's unreliable with parallel deployment
-func (vt *FluxTest) skipFirstRound() error {
-	// just wait for the first round to settle about initial data
-	err := vt.checkRoundDataOnChain(1, tools.VariableData)
-	if err != nil {
-		return err
-	}
-	_, err = vt.roundsStartTimes()
-	if err != nil {
-		return err
 	}
 	return nil
 }

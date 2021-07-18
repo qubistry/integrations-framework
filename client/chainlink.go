@@ -133,7 +133,7 @@ func (c *chainlink) ReadSpec(id string) (*Response, error) {
 	return specObj, err
 }
 
-// ReadRunsForJob reads all runs for a job
+// ReadRunsByJob reads all runs for a job
 func (c *chainlink) ReadRunsByJob(jobID string) (*JobRunsResponse, error) {
 	runsObj := &JobRunsResponse{}
 	log.Info().Str("Node URL", c.Config.URL).Str("JobID", jobID).Msg("Reading runs for a job")

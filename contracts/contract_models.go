@@ -53,7 +53,6 @@ type FluxAggregator interface {
 	SetOracles(client.BlockchainWallet, SetOraclesOptions) error
 	Description(ctxt context.Context) (string, error)
 	SetRequesterPermissions(ctx context.Context, fromWallet client.BlockchainWallet, addr common.Address, authorized bool, roundsDelay uint32) error
-	AwaitRoundSubmissions(ctx context.Context, submissions int, submissionVal *big.Int, roundID int) (int64, error)
 	FilterRoundSubmissions(ctx context.Context, submissions int, submissionVal *big.Int, roundID int) (int64, error)
 }
 
