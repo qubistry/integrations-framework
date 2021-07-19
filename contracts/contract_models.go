@@ -29,13 +29,19 @@ type FluxAggregatorData struct {
 	Oracles         []common.Address // Addresses of oracles on the contract
 }
 
-type SetOraclesOptions struct {
+type FluxAggregatorSetOraclesOptions struct {
 	AddList            []common.Address // oracle addresses to add
 	RemoveList         []common.Address // oracle addresses to remove
 	AdminList          []common.Address // oracle addresses to become admin
 	MinSubmissions     uint32           // min amount of submissions in round
 	MaxSubmissions     uint32           // max amount of submissions in round
 	RestartDelayRounds uint32           // rounds to wait after oracles has changed
+}
+
+type SubmissionEvent struct {
+	Submission  *big.Int
+	Round       uint32
+	BlockNumber uint64
 }
 
 type FluxAggregator interface {
@@ -50,14 +56,10 @@ type FluxAggregator interface {
 	WithdrawPayment(ctx context.Context, caller client.BlockchainWallet, from common.Address, to common.Address, amount *big.Int) error
 	WithdrawablePayment(ctx context.Context, addr common.Address) (*big.Int, error)
 	GetOracles(ctx context.Context) ([]string, error)
-	SetOracles(client.BlockchainWallet, SetOraclesOptions) error
+	SetOracles(client.BlockchainWallet, FluxAggregatorSetOraclesOptions) error
 	Description(ctxt context.Context) (string, error)
 	SetRequesterPermissions(ctx context.Context, fromWallet client.BlockchainWallet, addr common.Address, authorized bool, roundsDelay uint32) error
-	FilterRoundSubmissions(ctx context.Context, submissionVal *big.Int, roundID int) ([]SubmissionReceivedEvent, error)
-}
-
-type SubmissionReceivedEvent interface {
-	BlockNumber() int64
+	FilterRoundSubmissions(ctx context.Context, submissionVal *big.Int, roundID int) ([]*SubmissionEvent, error)
 }
 
 type LinkToken interface {
@@ -125,6 +127,12 @@ type Storage interface {
 type VRF interface {
 	Fund(client.BlockchainWallet, *big.Int, *big.Int) error
 	ProofLength(context.Context) (*big.Int, error)
+}
+
+// JobByInstance helper struct to match job + instance ID
+type JobByInstance struct {
+	ID       string
+	Instance string
 }
 
 type RoundData struct {

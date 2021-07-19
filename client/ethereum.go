@@ -62,7 +62,7 @@ func NewEthereumClient(network BlockchainNetwork) (*EthereumClient, error) {
 	return &EthereumClient{
 		Network:      network,
 		Client:       cl,
-		BorrowNonces: true,
+		BorrowNonces: false,
 		NonceMu:      &sync.Mutex{},
 		Nonces:       make(map[string]uint64),
 	}, nil

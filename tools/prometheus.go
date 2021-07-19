@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	ScapeJobName              = "local_scrape"
 	QueryMemoryUsage          = `100 * (1 - ((avg_over_time(node_memory_MemFree_bytes[%s]) + avg_over_time(node_memory_Cached_bytes[%s]) + avg_over_time(node_memory_Buffers_bytes[%s])) / avg_over_time(node_memory_MemTotal_bytes[%s])))`
 	QueryAllCPUBusyPercentage = `100 - (avg by (instance) (irate(node_cpu_seconds_total{job="%s",mode="idle"}[%s])) * 100)`
 )
@@ -55,10 +56,8 @@ func (p *PromChecker) validateNotEmptyVec(q string, val model.Value) bool {
 
 // CPUBusyPercentage host CPU busy percentage
 func (p *PromChecker) CPUBusyPercentage() (float64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
-	defer cancel()
-	q := fmt.Sprintf(QueryAllCPUBusyPercentage, p.Cfg.ScrapeJobName, p.Cfg.TestAggregationInterval)
-	val, warns, err := p.API.Query(ctx, q, time.Now())
+	q := fmt.Sprintf(QueryAllCPUBusyPercentage, ScapeJobName, "2m")
+	val, warns, err := p.API.Query(context.Background(), q, time.Now())
 	if err != nil {
 		return 0, err
 	}
@@ -72,11 +71,8 @@ func (p *PromChecker) CPUBusyPercentage() (float64, error) {
 
 // MemoryUsage total memory used by interval
 func (p *PromChecker) MemoryUsage() (float64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
-	defer cancel()
-	i := p.Cfg.TestAggregationInterval
-	q := fmt.Sprintf(QueryMemoryUsage, i, i, i, i)
-	val, warns, err := p.API.Query(ctx, q, time.Now())
+	q := fmt.Sprintf(QueryMemoryUsage, "2m", "2m", "2m", "2m")
+	val, warns, err := p.API.Query(context.Background(), q, time.Now())
 	if err != nil {
 		return 0, err
 	}
@@ -88,17 +84,14 @@ func (p *PromChecker) MemoryUsage() (float64, error) {
 	return float64(scalarVal), nil
 }
 
-func (p *PromChecker) ResourcesSummary() (*ResourcesSummary, error) {
+func (p *PromChecker) ResourcesSummary() (float64, float64, error) {
 	cpu, err := p.CPUBusyPercentage()
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
 	mem, err := p.MemoryUsage()
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
-	return &ResourcesSummary{
-		CPUPercentage: cpu,
-		MemoryUsage:   mem,
-	}, nil
+	return cpu, mem, nil
 }

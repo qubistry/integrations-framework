@@ -25,17 +25,17 @@ type EthereumFluxAggregator struct {
 }
 
 // FilterRoundSubmissions filters rounds submissions, if there isn't enogh submissions found returns and error
-func (f *EthereumFluxAggregator) FilterRoundSubmissions(ctx context.Context, submissionVal *big.Int, roundID int) ([]SubmissionReceivedEvent, error) {
-	events := make([]SubmissionReceivedEvent, 0)
+func (f *EthereumFluxAggregator) FilterRoundSubmissions(ctx context.Context, submissionVal *big.Int, roundID int) ([]*SubmissionEvent, error) {
+	events := make([]*SubmissionEvent, 0)
 	iter, err := f.fluxAggregator.FilterSubmissionReceived(&bind.FilterOpts{Context: ctx}, []*big.Int{submissionVal}, []uint32{uint32(roundID)}, nil)
 	if err != nil {
 		return events, err
 	}
 	if iter.Event != nil {
-		events = append(events, &EthereumSubmissionReceivedEvent{iter.Event})
+		events = append(events, &SubmissionEvent{iter.Event.Submission, iter.Event.Round, iter.Event.Raw.BlockNumber})
 	}
 	for iter.Next() {
-		events = append(events, &EthereumSubmissionReceivedEvent{iter.Event})
+		events = append(events, &SubmissionEvent{iter.Event.Submission, iter.Event.Round, iter.Event.Raw.BlockNumber})
 	}
 	if len(events) == 0 {
 		return nil, errors.New(fmt.Sprintf("no events found for contract: %s", f.address.Hex()))
@@ -231,7 +231,7 @@ func (f *EthereumFluxAggregator) GetContractData(ctxt context.Context) (*FluxAgg
 // SetOracles allows the ability to add and/or remove oracles from the contract, and to set admins
 func (f *EthereumFluxAggregator) SetOracles(
 	fromWallet client.BlockchainWallet,
-	o SetOraclesOptions) error {
+	o FluxAggregatorSetOraclesOptions) error {
 	opts, err := f.client.TransactionOpts(fromWallet, *f.address, big.NewInt(0), nil)
 	if err != nil {
 		return err

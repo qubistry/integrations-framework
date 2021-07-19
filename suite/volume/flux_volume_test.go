@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/contracts"
+	"github.com/smartcontractkit/integrations-framework/suite/common"
 	"github.com/smartcontractkit/integrations-framework/tools"
 	"math/big"
 	"time"
@@ -15,11 +16,11 @@ var _ = Describe("Flux monitor volume tests", func() {
 	Describe("round completion times", func() {
 		jobPrefix := "flux_monitor"
 		spec := &FluxTestSpec{
-			TestSpec: TestSpec{
+			TestSpec: common.TestSpec{
 				InitFunc:                client.NewHardhatNetwork,
 				OnChainCheckAttemptsOpt: retry.Attempts(120),
 			},
-			AggregatorsNum:      100,
+			AggregatorsNum:      1,
 			RequiredSubmissions: 5,
 			RestartDelayRounds:  0,
 			JobPrefix:           jobPrefix,
@@ -49,17 +50,17 @@ var _ = Describe("Flux monitor volume tests", func() {
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			summary, err := ft.Prom.ResourcesSummary()
+			cpu, mem, err := ft.Prom.ResourcesSummary()
 			Expect(err).ShouldNot(HaveOccurred())
-			b.RecordValue("Sum CPU", summary.CPUPercentage)
-			b.RecordValue("Sum MEM", summary.MemoryUsage)
+			b.RecordValue("Sum CPU", cpu)
+			b.RecordValue("Sum MEM", mem)
 			currentRound += 1
 		}, rounds)
 
 		AfterSuite(func() {
-			percs, err := ft.calculatePercentiles(ft.roundsDurationData)
+			percs, err := ft.CalculatePercentiles(ft.roundsDurationData)
 			Expect(err).ShouldNot(HaveOccurred())
-			ft.printMetrics(percs)
+			ft.PrintMetrics(percs)
 		})
 	})
 })

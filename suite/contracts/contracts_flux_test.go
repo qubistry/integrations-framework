@@ -42,7 +42,7 @@ var _ = Describe("Flux monitor suite", func() {
 
 		// set oracles and submissions
 		err = fluxInstance.SetOracles(s.Wallets.Default(),
-			contracts.SetOraclesOptions{
+			contracts.FluxAggregatorSetOraclesOptions{
 				AddList:            oraclesAtTest,
 				RemoveList:         []common.Address{},
 				AdminList:          oraclesAtTest,

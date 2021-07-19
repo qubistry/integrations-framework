@@ -7,20 +7,21 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
+	"github.com/smartcontractkit/integrations-framework/actions"
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/contracts"
 	"github.com/smartcontractkit/integrations-framework/suite"
+	suitecommon "github.com/smartcontractkit/integrations-framework/suite/common"
 	"github.com/smartcontractkit/integrations-framework/tools"
 	"golang.org/x/sync/errgroup"
 	"math/big"
-	"sort"
 	"sync"
 	"time"
 )
 
 // FluxTestSpec flux aggregator volume test spec
 type FluxTestSpec struct {
-	TestSpec
+	suitecommon.TestSpec
 	AggregatorsNum              int
 	RequiredSubmissions         int
 	RestartDelayRounds          int
@@ -32,29 +33,24 @@ type FluxTestSpec struct {
 
 // FluxTest flux test runtime data
 type FluxTest struct {
-	Test
+	suitecommon.Test
 	// round durations, calculated as a difference from earliest chainlink run for contract,
 	// until all confirmations found on-chain (block_timestamp)
 	roundsDurationData []time.Duration
 	FluxInstances      *[]contracts.FluxAggregator
-	ContractsToJobsMap map[string][]JobByInstance
+	ContractsToJobsMap map[string][]contracts.JobByInstance
 	NodesByHostPort    map[string]client.Chainlink
 	AlreadySeenRuns    map[string]bool
 }
 
 // FluxInstanceDeployment data required by flux instance to calculate per round metrics
 type FluxInstanceDeployment struct {
-	InstanceDeployment
+	suitecommon.InstanceDeployment
+	Spec              *FluxTestSpec
 	FluxInstancesMu   *sync.Mutex
 	FluxInstances     *[]contracts.FluxAggregator
-	ContractToJobsMap map[string][]JobByInstance
+	ContractToJobsMap map[string][]contracts.JobByInstance
 	NodesByHostPort   map[string]client.Chainlink
-}
-
-// JobByInstance helper struct to match job + instance ID against prom metrics
-type JobByInstance struct {
-	ID       string
-	Instance string
 }
 
 // NewFluxTest deploys AggregatorsNum flux aggregators concurrently
@@ -78,36 +74,88 @@ func NewFluxTest(spec *FluxTestSpec) (*FluxTest, error) {
 
 	fluxInstances := make([]contracts.FluxAggregator, 0)
 	nodesByHostPort := make(map[string]client.Chainlink)
-	contractToJobsMap := make(map[string][]JobByInstance)
+	contractToJobsMap := make(map[string][]contracts.JobByInstance)
 	mu := &sync.Mutex{}
-	g := &errgroup.Group{}
+	//g := &errgroup.Group{}
 	for i := 0; i < spec.AggregatorsNum; i++ {
-		deployFluxInstance(&FluxInstanceDeployment{
-			InstanceDeployment: InstanceDeployment{
+		d := &FluxInstanceDeployment{
+			InstanceDeployment: suitecommon.InstanceDeployment{
 				Index:   i,
 				Suite:   s,
-				Spec:    spec,
 				Oracles: nodeAddrs,
 				Nodes:   clNodes,
 				Adapter: adapter,
 			},
+			Spec:              spec,
 			FluxInstancesMu:   mu,
 			NodesByHostPort:   nodesByHostPort,
 			FluxInstances:     &fluxInstances,
 			ContractToJobsMap: contractToJobsMap,
-		}, g)
+		}
+		log.Info().Int("Instance ID", d.Index).Msg("Deploying contracts instance")
+		fluxInstance, err := d.Suite.Deployer.DeployFluxAggregatorContract(d.Suite.Wallets.Default(), d.Spec.FluxOptions)
+		if err != nil {
+			return nil, err
+		}
+		err = fluxInstance.Fund(d.Suite.Wallets.Default(), big.NewInt(0), big.NewInt(1e18))
+		if err != nil {
+			return nil, err
+		}
+		err = fluxInstance.UpdateAvailableFunds(context.Background(), d.Suite.Wallets.Default())
+		if err != nil {
+			return nil, err
+		}
+		// set oracles and submissions
+		err = fluxInstance.SetOracles(d.Suite.Wallets.Default(),
+			contracts.FluxAggregatorSetOraclesOptions{
+				AddList:            d.Oracles,
+				RemoveList:         []common.Address{},
+				AdminList:          d.Oracles,
+				MinSubmissions:     uint32(d.Spec.RequiredSubmissions),
+				MaxSubmissions:     uint32(d.Spec.RequiredSubmissions),
+				RestartDelayRounds: uint32(d.Spec.RestartDelayRounds),
+			})
+		if err != nil {
+			return nil, err
+		}
+		for _, n := range d.Nodes {
+			fluxSpec := &client.FluxMonitorJobSpec{
+				Name:            fmt.Sprintf("%s_%d", d.Spec.JobPrefix, d.Index),
+				ContractAddress: fluxInstance.Address(),
+				PollTimerPeriod: d.Spec.NodePollTimePeriod,
+				// it's crucial not to skew rounds schedule for that particular volume test
+				IdleTimerDisabled: true,
+				PollTimerDisabled: false,
+				ObservationSource: client.ObservationSourceSpec(d.Adapter.InsideDockerAddr + "/variable"),
+			}
+			job, err := n.CreateJob(fluxSpec)
+			if err != nil {
+				return nil, err
+			}
+			d.FluxInstancesMu.Lock()
+			d.NodesByHostPort[n.URL()] = n
+			d.ContractToJobsMap[fluxInstance.Address()] = append(d.ContractToJobsMap[fluxInstance.Address()],
+				contracts.JobByInstance{
+					ID:       job.Data.ID,
+					Instance: n.URL(),
+				})
+			d.FluxInstancesMu.Unlock()
+		}
+		d.FluxInstancesMu.Lock()
+		*d.FluxInstances = append(*d.FluxInstances, fluxInstance)
+		d.FluxInstancesMu.Unlock()
 	}
-	err = g.Wait()
-	if err != nil {
-		return nil, err
-	}
+	//err = g.Wait()
+	//if err != nil {
+	//	return nil, err
+	//}
 	prom, err := tools.NewPrometheusClient(s.Config.Prometheus)
 	if err != nil {
 		return nil, err
 	}
 	log.Debug().Interface("Contracts to jobs", contractToJobsMap).Msg("Debug data for per round metrics")
 	return &FluxTest{
-		Test: Test{
+		Test: suitecommon.Test{
 			DefaultSetup:            s,
 			OnChainCheckAttemptsOpt: spec.OnChainCheckAttemptsOpt,
 			Nodes:                   clNodes,
@@ -122,141 +170,35 @@ func NewFluxTest(spec *FluxTestSpec) (*FluxTest, error) {
 	}, nil
 }
 
-// deployFluxInstance deploy one flux instance concurrently, add jobs to all the nodes
-func deployFluxInstance(d *FluxInstanceDeployment, g *errgroup.Group) {
-	g.Go(func() error {
-		log.Info().Int("Instance ID", d.Index).Msg("Deploying contracts instance")
-		fluxInstance, err := d.Suite.Deployer.DeployFluxAggregatorContract(d.Suite.Wallets.Default(), d.Spec.FluxOptions)
-		if err != nil {
-			return err
-		}
-		err = fluxInstance.Fund(d.Suite.Wallets.Default(), big.NewInt(0), big.NewInt(1e18))
-		if err != nil {
-			return err
-		}
-		err = fluxInstance.UpdateAvailableFunds(context.Background(), d.Suite.Wallets.Default())
-		if err != nil {
-			return err
-		}
-		// set oracles and submissions
-		err = fluxInstance.SetOracles(d.Suite.Wallets.Default(),
-			contracts.SetOraclesOptions{
-				AddList:            d.Oracles,
-				RemoveList:         []common.Address{},
-				AdminList:          d.Oracles,
-				MinSubmissions:     uint32(d.Spec.RequiredSubmissions),
-				MaxSubmissions:     uint32(d.Spec.RequiredSubmissions),
-				RestartDelayRounds: uint32(d.Spec.RestartDelayRounds),
-			})
-		if err != nil {
-			return err
-		}
-		for _, n := range d.Nodes {
-			fluxSpec := &client.FluxMonitorJobSpec{
-				Name:            fmt.Sprintf("%s_%d", d.Spec.JobPrefix, d.Index),
-				ContractAddress: fluxInstance.Address(),
-				PollTimerPeriod: d.Spec.NodePollTimePeriod,
-				// it's crucial not to skew rounds schedule for that particular volume test
-				IdleTimerDisabled: true,
-				PollTimerDisabled: false,
-				ObservationSource: client.ObservationSourceSpec(d.Adapter.InsideDockerAddr + "/variable"),
-			}
-			job, err := n.CreateJob(fluxSpec)
-			if err != nil {
-				return err
-			}
-			d.FluxInstancesMu.Lock()
-			d.NodesByHostPort[n.URL()] = n
-			d.ContractToJobsMap[fluxInstance.Address()] = append(d.ContractToJobsMap[fluxInstance.Address()],
-				JobByInstance{
-					ID:       job.Data.ID,
-					Instance: n.URL(),
-				})
-			d.FluxInstancesMu.Unlock()
-		}
-		d.FluxInstancesMu.Lock()
-		*d.FluxInstances = append(*d.FluxInstances, fluxInstance)
-		d.FluxInstancesMu.Unlock()
-		return nil
-	})
-}
-
 // roundsStartTimes gets run start time for every contract, ns
 func (vt *FluxTest) roundsStartTimes() (map[string]int64, error) {
 	mu := &sync.Mutex{}
 	g := &errgroup.Group{}
-	contactsStartTimes := make(map[string]int64)
+	contractsStartTimes := make(map[string]int64)
 	for contractAddr, jobs := range vt.ContractsToJobsMap {
 		contractAddr := contractAddr
 		jobs := jobs
-		g.Go(func() error {
-			startTimesAcrossNodes := make([]int64, 0)
-			for _, j := range jobs {
-				// get node for a job
-				node := vt.NodesByHostPort[j.Instance]
-				runs, err := node.ReadRunsByJob(j.ID)
-				if err != nil {
-					return err
-				}
-				runsStartTimes := make([]int64, 0)
-				for _, r := range runs.Data {
-					runsStartTimes = append(runsStartTimes, r.Attributes.CreatedAt.UnixNano()) // milliseconds
-				}
-				sort.SliceStable(runsStartTimes, func(i, j int) bool {
-					return runsStartTimes[i] > runsStartTimes[j]
-				})
-				lastRunStartTime := runsStartTimes[0]
-				startTimesAcrossNodes = append(startTimesAcrossNodes, lastRunStartTime)
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			// earliest start across nodes for contract
-			sort.SliceStable(startTimesAcrossNodes, func(i, j int) bool {
-				return startTimesAcrossNodes[i] < startTimesAcrossNodes[j]
-			})
-			contactsStartTimes[contractAddr] = startTimesAcrossNodes[0]
-			return nil
-		})
+		g.Go(actions.GetRoundStartTimesAcrossNodes(contractAddr, jobs, vt.NodesByHostPort, mu, contractsStartTimes))
 	}
 	err := g.Wait()
 	if err != nil {
 		return nil, err
 	}
-	log.Debug().Interface("Round start times", contactsStartTimes).Send()
-	return contactsStartTimes, nil
+	for contract, rst := range contractsStartTimes {
+		log.Debug().Str("Contract", contract).Int64("Start time", rst/1e9).Send()
+	}
+	log.Debug().Interface("Round start times", contractsStartTimes).Send()
+	return contractsStartTimes, nil
 }
 
 // checkRoundSubmissionsEvents checks whether all submissions is found, gets last event block as round end time
 func (vt *FluxTest) checkRoundSubmissionsEvents(ctx context.Context, roundID int, submissions int, submissionVal *big.Int) (map[string]int64, error) {
-	g, gctx := errgroup.WithContext(ctx)
-
+	g := errgroup.Group{}
 	mu := &sync.Mutex{}
 	endTimes := make(map[string]int64)
 	for _, fi := range *vt.FluxInstances {
 		fi := fi
-		g.Go(func() error {
-			events, err := fi.FilterRoundSubmissions(gctx, submissionVal, roundID)
-			if err != nil {
-				return err
-			}
-			if len(events) == submissions {
-				lastEvent := events[len(events)-1]
-				hTime, err := vt.DefaultSetup.Client.HeaderTimestampByNumber(ctx, big.NewInt(lastEvent.BlockNumber()))
-				if err != nil {
-					return err
-				}
-				log.Debug().
-					Str("Contract", fi.Address()).
-					Uint64("Header timestamp ns", hTime*1e9).
-					Msg("All submissions found")
-				mu.Lock()
-				defer mu.Unlock()
-				// milliseconds
-				endTimes[fi.Address()] = int64(hTime) * 1e9
-				return nil
-			}
-			return errors.New(fmt.Sprintf("not all submissions found for contract: %s", fi.Address()))
-		})
+		g.Go(actions.GetRoundCompleteTimestamps(fi, roundID, submissions, submissionVal, mu, endTimes, vt.DefaultSetup.Client))
 	}
 	err := g.Wait()
 	if err != nil {

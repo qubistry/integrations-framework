@@ -1,4 +1,4 @@
-package volume
+package common
 
 import (
 	"github.com/avast/retry-go"
@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// TestSpec common volume test spec
+// TestSpec common test spec
 type TestSpec struct {
 	InitFunc                client.BlockchainNetworkInit
 	OnChainCheckAttemptsOpt func(config *retry.Config)
@@ -23,7 +23,6 @@ type InstanceDeployment struct {
 	Wg      *sync.WaitGroup
 	Index   int
 	Suite   *suite.DefaultSuiteSetup
-	Spec    *FluxTestSpec
 	Oracles []common.Address
 	Nodes   []client.Chainlink
 	Adapter tools.ExternalAdapter
@@ -49,7 +48,7 @@ type PercentileReport struct {
 	P50    float64
 }
 
-func (t *Test) printMetrics(m *PercentileReport) {
+func (t *Test) PrintMetrics(m *PercentileReport) {
 	log.Info().Float64("Round duration ms MAX", m.Max).Send()
 	log.Info().Float64("Round duration ms P99", m.P99).Send()
 	log.Info().Float64("Round duration ms P95", m.P95).Send()
@@ -59,8 +58,8 @@ func (t *Test) printMetrics(m *PercentileReport) {
 	log.Info().Float64("Round duration ms standard deviation", m.StdDev).Send()
 }
 
-// calculatePercentiles calculates percentiles for arbitrary float64 data
-func (t *Test) calculatePercentiles(data []time.Duration) (*PercentileReport, error) {
+// CalculatePercentiles calculates percentiles for arbitrary float64 data
+func (t *Test) CalculatePercentiles(data []time.Duration) (*PercentileReport, error) {
 	dataFloat64 := make([]float64, 0)
 	for _, d := range data {
 		dataFloat64 = append(dataFloat64, float64(d.Milliseconds()))
