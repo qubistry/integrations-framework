@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/smartcontractkit/integrations-framework/client"
@@ -88,6 +87,6 @@ func GetRoundCompleteTimestamps(
 			endTimes[fi.Address()] = int64(hTime) * 1e9
 			return nil
 		}
-		return errors.New(fmt.Sprintf("not all submissions found for contract: %s", fi.Address()))
+		return fmt.Errorf("not all submissions found for contract: %s", fi.Address())
 	}
 }
