@@ -12,18 +12,11 @@ import (
 )
 
 const (
-	QueryMemoryUsage               = `100 * (1 - ((avg_over_time(node_memory_MemFree_bytes[%s]) + avg_over_time(node_memory_Cached_bytes[%s]) + avg_over_time(node_memory_Buffers_bytes[%s])) / avg_over_time(node_memory_MemTotal_bytes[%s])))`
-	QueryNodesLastReportedRoundsTs = `timestamp(flux_monitor_reported_round{job="%s",job_spec_id=~".*"})`
-	QueryAllCPUBusyPercentage      = `100 - (avg by (instance) (irate(node_cpu_seconds_total{job="%s",mode="idle"}[%s])) * 100)`
+	QueryMemoryUsage          = `100 * (1 - ((avg_over_time(node_memory_MemFree_bytes[%s]) + avg_over_time(node_memory_Cached_bytes[%s]) + avg_over_time(node_memory_Buffers_bytes[%s])) / avg_over_time(node_memory_MemTotal_bytes[%s])))`
+	QueryAllCPUBusyPercentage = `100 - (avg by (instance) (irate(node_cpu_seconds_total{job="%s",mode="idle"}[%s])) * 100)`
 )
 
-type FluxRoundMetrics struct {
-	Instance string
-	JobID    int
-	Value    int
-}
-
-type FluxRoundSummary struct {
+type ResourcesSummary struct {
 	MemoryUsage   float64
 	CPUPercentage float64
 }
@@ -44,21 +37,6 @@ func NewPrometheusClient(cfg *config.PrometheusClientConfig) (*PromChecker, erro
 		API: v1.NewAPI(client),
 		Cfg: cfg,
 	}, nil
-}
-
-func (p *PromChecker) NodesLastReportedRoundsTs() (model.Vector, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.QueryTimeout)
-	defer cancel()
-	q := fmt.Sprintf(QueryNodesLastReportedRoundsTs, p.Cfg.ScrapeJobName)
-	val, warns, err := p.API.Query(ctx, q, time.Now())
-	if err != nil {
-		return nil, err
-	}
-	p.printWarns(warns)
-	if !p.validateNotEmptyVec(q, val) {
-		return nil, nil
-	}
-	return val.(model.Vector), nil
 }
 
 func (p *PromChecker) printWarns(warns v1.Warnings) {
@@ -110,7 +88,7 @@ func (p *PromChecker) MemoryUsage() (float64, error) {
 	return float64(scalarVal), nil
 }
 
-func (p *PromChecker) ResourcesSummary() (*FluxRoundSummary, error) {
+func (p *PromChecker) ResourcesSummary() (*ResourcesSummary, error) {
 	cpu, err := p.CPUBusyPercentage()
 	if err != nil {
 		return nil, err
@@ -119,7 +97,7 @@ func (p *PromChecker) ResourcesSummary() (*FluxRoundSummary, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FluxRoundSummary{
+	return &ResourcesSummary{
 		CPUPercentage: cpu,
 		MemoryUsage:   mem,
 	}, nil

@@ -9,6 +9,7 @@ import (
 	"github.com/smartcontractkit/integrations-framework/suite"
 	"github.com/smartcontractkit/integrations-framework/tools"
 	"sync"
+	"time"
 )
 
 // TestSpec common volume test spec
@@ -59,58 +60,38 @@ func (t *Test) printMetrics(m *PercentileReport) {
 }
 
 // calculatePercentiles calculates percentiles for arbitrary float64 data
-func (t *Test) calculatePercentiles(data []float64) (*PercentileReport, error) {
-	perc99, err := stats.Percentile(data, 99)
+func (t *Test) calculatePercentiles(data []time.Duration) (*PercentileReport, error) {
+	dataFloat64 := make([]float64, 0)
+	for _, d := range data {
+		dataFloat64 = append(dataFloat64, float64(d.Milliseconds()))
+	}
+	perc99, err := stats.Percentile(dataFloat64, 99)
 	if err != nil {
 		return nil, err
 	}
-	perc95, err := stats.Percentile(data, 95)
+	perc95, err := stats.Percentile(dataFloat64, 95)
 	if err != nil {
 		return nil, err
 	}
-	perc90, err := stats.Percentile(data, 90)
+	perc90, err := stats.Percentile(dataFloat64, 90)
 	if err != nil {
 		return nil, err
 	}
-	perc50, err := stats.Percentile(data, 50)
+	perc50, err := stats.Percentile(dataFloat64, 50)
 	if err != nil {
 		return nil, err
 	}
-	max, err := stats.Max(data)
+	max, err := stats.Max(dataFloat64)
 	if err != nil {
 		return nil, err
 	}
-	min, err := stats.Min(data)
+	min, err := stats.Min(dataFloat64)
 	if err != nil {
 		return nil, err
 	}
-	stdDev, err := stats.StandardDeviation(data)
+	stdDev, err := stats.StandardDeviation(dataFloat64)
 	if err != nil {
 		return nil, err
 	}
 	return &PercentileReport{P99: perc99, P95: perc95, P90: perc90, P50: perc50, Max: max, Min: min, StdDev: stdDev}, nil
-}
-
-func minInt64Slice(v []int64) (m int64) {
-	if len(v) > 0 {
-		m = v[0]
-	}
-	for i := 1; i < len(v); i++ {
-		if v[i] < m {
-			m = v[i]
-		}
-	}
-	return
-}
-
-func maxInt64Slice(v []int64) (m int64) {
-	if len(v) > 0 {
-		m = v[0]
-	}
-	for i := 1; i < len(v); i++ {
-		if v[i] > m {
-			m = v[i]
-		}
-	}
-	return
 }

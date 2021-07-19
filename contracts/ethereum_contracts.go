@@ -25,35 +25,23 @@ type EthereumFluxAggregator struct {
 }
 
 // FilterRoundSubmissions filters rounds submissions, if there isn't enogh submissions found returns and error
-func (f *EthereumFluxAggregator) FilterRoundSubmissions(ctx context.Context, submissions int, submissionVal *big.Int, roundID int) (int64, error) {
+func (f *EthereumFluxAggregator) FilterRoundSubmissions(ctx context.Context, submissionVal *big.Int, roundID int) ([]SubmissionReceivedEvent, error) {
+	events := make([]SubmissionReceivedEvent, 0)
 	iter, err := f.fluxAggregator.FilterSubmissionReceived(&bind.FilterOpts{Context: ctx}, []*big.Int{submissionVal}, []uint32{uint32(roundID)}, nil)
 	if err != nil {
-		return 0, err
+		return events, err
 	}
-	submissionsCount := 0
 	if iter.Event != nil {
-		submissionsCount += 1
+		events = append(events, &EthereumSubmissionReceivedEvent{iter.Event})
 	}
 	for iter.Next() {
-		submissionsCount += 1
+		events = append(events, &EthereumSubmissionReceivedEvent{iter.Event})
 	}
-	if submissionsCount > submissions {
-		_ = iter.Close()
-		return 0, errors.New(fmt.Sprintf("more submissions found than expected for contract: %s", f.address.Hex()))
-	}
-	if submissionsCount == submissions {
-		bn := iter.Event.Raw.BlockNumber
-		h, err := f.client.Client.HeaderByNumber(ctx, big.NewInt(int64(bn)))
-		if err != nil {
-			return 0, err
-		}
-		log.Debug().Str("Contract", f.address.Hex()).Msg("All submissions found")
-		_ = iter.Close()
-		// milliseconds
-		return int64(h.Time * 1000), nil
+	if len(events) == 0 {
+		return nil, errors.New(fmt.Sprintf("no events found for contract: %s", f.address.Hex()))
 	}
 	_ = iter.Close()
-	return 0, errors.New(fmt.Sprintf("not enough submissions for contract: %s", f.address.Hex()))
+	return events, nil
 }
 
 // Address ethereum contract address
@@ -264,6 +252,16 @@ func (f *EthereumFluxAggregator) Description(ctxt context.Context) (string, erro
 		Context: ctxt,
 	}
 	return f.fluxAggregator.Description(opts)
+}
+
+// EthereumSubmissionReceivedEvent submission received event impl
+type EthereumSubmissionReceivedEvent struct {
+	*ethereum.FluxAggregatorSubmissionReceived
+}
+
+// BlockNumber gets block number from event
+func (e *EthereumSubmissionReceivedEvent) BlockNumber() int64 {
+	return int64(e.Raw.BlockNumber)
 }
 
 // EthereumLinkToken represents a LinkToken address

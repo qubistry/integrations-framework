@@ -36,6 +36,15 @@ func (e *EthereumClient) BlockNumber(ctx context.Context) (uint64, error) {
 	return bn, nil
 }
 
+// HeaderTimestampByNumber gets header timestamp by number
+func (e *EthereumClient) HeaderTimestampByNumber(ctx context.Context, bn *big.Int) (uint64, error) {
+	h, err := e.Client.HeaderByNumber(ctx, bn)
+	if err != nil {
+		return 0, err
+	}
+	return h.Time, nil
+}
+
 // ContractDeployer acts as a go-between function for general contract deployment
 type ContractDeployer func(auth *bind.TransactOpts, backend bind.ContractBackend) (
 	common.Address,
@@ -50,11 +59,10 @@ func NewEthereumClient(network BlockchainNetwork) (*EthereumClient, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return &EthereumClient{
 		Network:      network,
 		Client:       cl,
-		BorrowNonces: false,
+		BorrowNonces: true,
 		NonceMu:      &sync.Mutex{},
 		Nonces:       make(map[string]uint64),
 	}, nil

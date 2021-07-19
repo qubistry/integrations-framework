@@ -13,6 +13,7 @@ import (
 	"github.com/smartcontractkit/integrations-framework/tools"
 	"golang.org/x/sync/errgroup"
 	"math/big"
+	"sort"
 	"sync"
 	"time"
 )
@@ -34,7 +35,7 @@ type FluxTest struct {
 	Test
 	// round durations, calculated as a difference from earliest chainlink run for contract,
 	// until all confirmations found on-chain (block_timestamp)
-	roundsDurationData []float64
+	roundsDurationData []time.Duration
 	FluxInstances      *[]contracts.FluxAggregator
 	ContractsToJobsMap map[string][]JobByInstance
 	NodesByHostPort    map[string]client.Chainlink
@@ -48,12 +49,6 @@ type FluxInstanceDeployment struct {
 	FluxInstances     *[]contracts.FluxAggregator
 	ContractToJobsMap map[string][]JobByInstance
 	NodesByHostPort   map[string]client.Chainlink
-}
-
-// roundVals structure only for on-chain debug
-type roundVals struct {
-	RoundID int64
-	Val     int64
 }
 
 // JobByInstance helper struct to match job + instance ID against prom metrics
@@ -76,7 +71,6 @@ func NewFluxTest(spec *FluxTestSpec) (*FluxTest, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.Client.(*client.EthereumClient).BorrowedNonces(true)
 	adapter, err := tools.NewExternalAdapter()
 	if err != nil {
 		return nil, err
@@ -123,7 +117,7 @@ func NewFluxTest(spec *FluxTestSpec) (*FluxTest, error) {
 		FluxInstances:      &fluxInstances,
 		ContractsToJobsMap: contractToJobsMap,
 		NodesByHostPort:    nodesByHostPort,
-		roundsDurationData: make([]float64, 0),
+		roundsDurationData: make([]time.Duration, 0),
 		AlreadySeenRuns:    make(map[string]bool),
 	}, nil
 }
@@ -187,7 +181,7 @@ func deployFluxInstance(d *FluxInstanceDeployment, g *errgroup.Group) {
 	})
 }
 
-// roundsStartTimes gets run start time for every contract
+// roundsStartTimes gets run start time for every contract, ns
 func (vt *FluxTest) roundsStartTimes() (map[string]float64, error) {
 	mu := &sync.Mutex{}
 	g := &errgroup.Group{}
@@ -206,15 +200,21 @@ func (vt *FluxTest) roundsStartTimes() (map[string]float64, error) {
 				}
 				runsStartTimes := make([]int64, 0)
 				for _, r := range runs.Data {
-					runsStartTimes = append(runsStartTimes, r.Attributes.CreatedAt.UnixNano()/1e6) // milliseconds
+					runsStartTimes = append(runsStartTimes, r.Attributes.CreatedAt.UnixNano()) // milliseconds
 				}
-				lastRunStartTime := maxInt64Slice(runsStartTimes)
+				sort.SliceStable(runsStartTimes, func(i, j int) bool {
+					return runsStartTimes[i] > runsStartTimes[j]
+				})
+				lastRunStartTime := runsStartTimes[0]
 				startTimesAcrossNodes = append(startTimesAcrossNodes, lastRunStartTime)
 			}
 			mu.Lock()
 			defer mu.Unlock()
 			// earliest start across nodes for contract
-			contactsStartTimes[contractAddr] = float64(minInt64Slice(startTimesAcrossNodes))
+			sort.SliceStable(startTimesAcrossNodes, func(i, j int) bool {
+				return startTimesAcrossNodes[i] < startTimesAcrossNodes[j]
+			})
+			contactsStartTimes[contractAddr] = float64(startTimesAcrossNodes[0])
 			return nil
 		})
 	}
@@ -226,7 +226,8 @@ func (vt *FluxTest) roundsStartTimes() (map[string]float64, error) {
 	return contactsStartTimes, nil
 }
 
-func (vt *FluxTest) getAllRoundsSubmissionsEvents(ctx context.Context, roundID int, submissions int, submissionVal *big.Int) (map[string]float64, error) {
+// checkRoundSubmissionsEvents checks whether all submissions is found, gets last event block as round end time
+func (vt *FluxTest) checkRoundSubmissionsEvents(ctx context.Context, roundID int, submissions int, submissionVal *big.Int) (map[string]float64, error) {
 	g, gctx := errgroup.WithContext(ctx)
 
 	mu := &sync.Mutex{}
@@ -234,14 +235,27 @@ func (vt *FluxTest) getAllRoundsSubmissionsEvents(ctx context.Context, roundID i
 	for _, fi := range *vt.FluxInstances {
 		fi := fi
 		g.Go(func() error {
-			endTime, err := fi.FilterRoundSubmissions(gctx, submissions, submissionVal, roundID)
+			events, err := fi.FilterRoundSubmissions(gctx, submissionVal, roundID)
 			if err != nil {
 				return err
 			}
-			mu.Lock()
-			defer mu.Unlock()
-			endTimes[fi.Address()] = float64(endTime)
-			return nil
+			if len(events) == submissions {
+				lastEvent := events[len(events)-1]
+				hTime, err := vt.DefaultSetup.Client.HeaderTimestampByNumber(ctx, big.NewInt(lastEvent.BlockNumber()))
+				if err != nil {
+					return err
+				}
+				log.Debug().
+					Str("Contract", fi.Address()).
+					Uint64("Header timestamp ns", hTime*1e9).
+					Msg("All submissions found")
+				mu.Lock()
+				defer mu.Unlock()
+				// milliseconds
+				endTimes[fi.Address()] = float64(hTime * 1e9)
+				return nil
+			}
+			return errors.New(fmt.Sprintf("not all submissions found for contract: %s", fi.Address()))
 		})
 	}
 	err := g.Wait()
@@ -257,14 +271,14 @@ func (vt *FluxTest) roundsMetrics(roundID int, submissions int, submissionVal *b
 	if err != nil {
 		return err
 	}
-	endTimes, err := vt.getAllRoundsSubmissionsEvents(context.Background(), roundID, submissions, submissionVal)
+	endTimes, err := vt.checkRoundSubmissionsEvents(context.Background(), roundID, submissions, submissionVal)
 	if err != nil {
 		return err
 	}
 	for contract := range startTimes {
-		duration := endTimes[contract] - startTimes[contract]
+		duration := time.Duration(endTimes[contract] - startTimes[contract])
 		vt.roundsDurationData = append(vt.roundsDurationData, duration)
-		log.Info().Str("Contract", contract).Float64("Round duration ms", duration).Send()
+		log.Info().Str("Contract", contract).Str("Round duration", duration.String()).Send()
 	}
 	return nil
 }
@@ -296,25 +310,10 @@ func (vt *FluxTest) checkContractData(roundID int, newVal int) (bool, error) {
 		}
 		rounds = append(rounds, cd)
 	}
-	vt.debugRoundTuple(rounds)
 	for _, r := range rounds {
 		if r.LatestRoundData.RoundId.Int64() != int64(roundID) || r.LatestRoundData.Answer.Int64() != int64(newVal) {
 			return false, nil
 		}
 	}
 	return true, nil
-}
-
-func (vt *FluxTest) debugRoundTuple(rounds []*contracts.FluxAggregatorData) {
-	roundValsArr := make([]roundVals, 0)
-	for _, r := range rounds {
-		if r == nil {
-			continue
-		}
-		roundValsArr = append(roundValsArr, roundVals{
-			RoundID: r.LatestRoundData.RoundId.Int64(),
-			Val:     r.LatestRoundData.Answer.Int64(),
-		})
-	}
-	log.Debug().Interface("Rounds values on chain", roundValsArr).Msg("Last rounds on chain")
 }
