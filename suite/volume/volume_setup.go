@@ -182,10 +182,10 @@ func deployFluxInstance(d *FluxInstanceDeployment, g *errgroup.Group) {
 }
 
 // roundsStartTimes gets run start time for every contract, ns
-func (vt *FluxTest) roundsStartTimes() (map[string]float64, error) {
+func (vt *FluxTest) roundsStartTimes() (map[string]int64, error) {
 	mu := &sync.Mutex{}
 	g := &errgroup.Group{}
-	contactsStartTimes := make(map[string]float64)
+	contactsStartTimes := make(map[string]int64)
 	for contractAddr, jobs := range vt.ContractsToJobsMap {
 		contractAddr := contractAddr
 		jobs := jobs
@@ -214,7 +214,7 @@ func (vt *FluxTest) roundsStartTimes() (map[string]float64, error) {
 			sort.SliceStable(startTimesAcrossNodes, func(i, j int) bool {
 				return startTimesAcrossNodes[i] < startTimesAcrossNodes[j]
 			})
-			contactsStartTimes[contractAddr] = float64(startTimesAcrossNodes[0])
+			contactsStartTimes[contractAddr] = startTimesAcrossNodes[0]
 			return nil
 		})
 	}
@@ -227,11 +227,11 @@ func (vt *FluxTest) roundsStartTimes() (map[string]float64, error) {
 }
 
 // checkRoundSubmissionsEvents checks whether all submissions is found, gets last event block as round end time
-func (vt *FluxTest) checkRoundSubmissionsEvents(ctx context.Context, roundID int, submissions int, submissionVal *big.Int) (map[string]float64, error) {
+func (vt *FluxTest) checkRoundSubmissionsEvents(ctx context.Context, roundID int, submissions int, submissionVal *big.Int) (map[string]int64, error) {
 	g, gctx := errgroup.WithContext(ctx)
 
 	mu := &sync.Mutex{}
-	endTimes := make(map[string]float64)
+	endTimes := make(map[string]int64)
 	for _, fi := range *vt.FluxInstances {
 		fi := fi
 		g.Go(func() error {
@@ -252,7 +252,7 @@ func (vt *FluxTest) checkRoundSubmissionsEvents(ctx context.Context, roundID int
 				mu.Lock()
 				defer mu.Unlock()
 				// milliseconds
-				endTimes[fi.Address()] = float64(hTime * 1e9)
+				endTimes[fi.Address()] = int64(hTime) * 1e9
 				return nil
 			}
 			return errors.New(fmt.Sprintf("not all submissions found for contract: %s", fi.Address()))
