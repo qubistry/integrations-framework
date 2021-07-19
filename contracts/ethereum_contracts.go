@@ -30,7 +30,6 @@ func (f *EthereumFluxAggregator) FilterRoundSubmissions(ctx context.Context, sub
 	if err != nil {
 		return 0, err
 	}
-	defer iter.Close()
 	submissionsCount := 0
 	if iter.Event != nil {
 		submissionsCount += 1
@@ -39,6 +38,7 @@ func (f *EthereumFluxAggregator) FilterRoundSubmissions(ctx context.Context, sub
 		submissionsCount += 1
 	}
 	if submissionsCount > submissions {
+		_ = iter.Close()
 		return 0, errors.New(fmt.Sprintf("more submissions found than expected for contract: %s", f.address.Hex()))
 	}
 	if submissionsCount == submissions {
@@ -48,9 +48,11 @@ func (f *EthereumFluxAggregator) FilterRoundSubmissions(ctx context.Context, sub
 			return 0, err
 		}
 		log.Debug().Str("Contract", f.address.Hex()).Msg("All submissions found")
+		_ = iter.Close()
 		// milliseconds
 		return int64(h.Time * 1000), nil
 	}
+	_ = iter.Close()
 	return 0, errors.New(fmt.Sprintf("not enough submissions for contract: %s", f.address.Hex()))
 }
 
