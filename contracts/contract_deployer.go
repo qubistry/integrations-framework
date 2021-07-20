@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"context"
 	"errors"
 	"math/big"
 	"time"
@@ -71,6 +72,11 @@ func (e *EthereumContractDeployer) DeployFluxAggregatorContract(
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		linkAddress := common.HexToAddress(e.eth.Network.Config().LinkTokenAddress)
 		return ethereum.DeployFluxAggregator(auth,
 			backend,
@@ -100,6 +106,11 @@ func (e *EthereumContractDeployer) DeployLinkTokenContract(fromWallet client.Blo
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployLinkToken(auth, backend)
 	})
 	if err != nil {
@@ -158,6 +169,11 @@ func (e *EthereumContractDeployer) DeployOffChainAggregator(
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		linkAddress := common.HexToAddress(e.eth.Network.Config().LinkTokenAddress)
 		return ethereum.DeployOffchainAggregator(auth,
 			backend,
@@ -191,6 +207,11 @@ func (e *EthereumContractDeployer) DeployStorageContract(fromWallet client.Block
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployStore(auth, backend)
 	})
 	if err != nil {
@@ -208,6 +229,11 @@ func (e *EthereumContractDeployer) DeployVRFContract(fromWallet client.Blockchai
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployVRF(auth, backend)
 	})
 	if err != nil {
@@ -219,4 +245,19 @@ func (e *EthereumContractDeployer) DeployVRFContract(fromWallet client.Blockchai
 		callerWallet: fromWallet,
 		address:      address,
 	}, err
+}
+
+func (e *EthereumContractDeployer) AdjustGasPrice() (*big.Int, error) {
+	gasPrice, err := e.eth.Client.SuggestGasPrice(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	chainId := e.eth.Network.ChainID()
+	if chainId == big.NewInt(30) || chainId == big.NewInt(31) || chainId == big.NewInt(33) {
+		x, y, z := big.NewInt(0), big.NewInt(0), big.NewInt(0)
+		x.Add(gasPrice, y.Div(z.Mul(gasPrice, big.NewInt(2)), big.NewInt(100)))
+		return x, nil
+	} else {
+		return gasPrice, nil
+	}
 }
