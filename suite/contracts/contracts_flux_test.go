@@ -2,6 +2,10 @@ package suite
 
 import (
 	"context"
+	"math/big"
+	"strings"
+	"time"
+
 	"github.com/ethereum/go-ethereum/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -11,9 +15,6 @@ import (
 	"github.com/smartcontractkit/integrations-framework/contracts"
 	"github.com/smartcontractkit/integrations-framework/suite"
 	"github.com/smartcontractkit/integrations-framework/tools"
-	"math/big"
-	"strings"
-	"time"
 )
 
 var _ = Describe("Flux monitor suite", func() {
@@ -37,7 +38,7 @@ var _ = Describe("Flux monitor suite", func() {
 		oraclesAtTest := nodeAddrs[:3]
 		clNodesAtTest := clNodes[:3]
 		Expect(err).ShouldNot(HaveOccurred())
-		err = suite.FundTemplateNodes(s.Client, s.Wallets, clNodes, 2e18, 0)
+		err = suite.FundTemplateNodes(s.Client, s.Wallets, clNodes, 1e14, 0)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// set oracles and submissions
@@ -106,7 +107,7 @@ var _ = Describe("Flux monitor suite", func() {
 			Expect(payment.Int64()).Should(Equal(int64(2)))
 		}
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultFluxAggregatorOptions()),
 	)
 
 	DescribeTable("Check removing/adding oracles, check new rounds is correct", func(
@@ -115,7 +116,7 @@ var _ = Describe("Flux monitor suite", func() {
 	) {
 		// TODO
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultFluxAggregatorOptions()),
 	)
 
 	DescribeTable("Check oracle cooldown when add", func(
@@ -124,7 +125,7 @@ var _ = Describe("Flux monitor suite", func() {
 	) {
 		// TODO
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultFluxAggregatorOptions()),
 	)
 
 	DescribeTable("Adapter went offline, come online, round data received in suggested round", func(
@@ -133,7 +134,7 @@ var _ = Describe("Flux monitor suite", func() {
 	) {
 		// TODO
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultFluxAggregatorOptions()),
 	)
 
 	DescribeTable("Different sources, only one have flux", func(
@@ -142,7 +143,7 @@ var _ = Describe("Flux monitor suite", func() {
 	) {
 		// TODO
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultFluxAggregatorOptions()),
 	)
 
 	DescribeTable("Bridge source", func(
@@ -151,7 +152,7 @@ var _ = Describe("Flux monitor suite", func() {
 	) {
 		// TODO
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultFluxAggregatorOptions()),
 	)
 
 	DescribeTable("Check withdrawal with respect to RESERVE_ROUNDS", func(
@@ -160,7 +161,7 @@ var _ = Describe("Flux monitor suite", func() {
 	) {
 		// TODO
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultFluxAggregatorOptions()),
 	)
 
 	DescribeTable("Person other than oracles starting a round", func(
@@ -169,6 +170,6 @@ var _ = Describe("Flux monitor suite", func() {
 	) {
 		// TODO
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultFluxAggregatorOptions()),
 	)
 })

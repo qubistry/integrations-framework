@@ -2,10 +2,11 @@ package suite
 
 import (
 	"context"
-	"github.com/smartcontractkit/integrations-framework/contracts"
-	"github.com/smartcontractkit/integrations-framework/suite"
 	"math/big"
 	"time"
+
+	"github.com/smartcontractkit/integrations-framework/contracts"
+	"github.com/smartcontractkit/integrations-framework/suite"
 
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/tools"
@@ -38,7 +39,7 @@ var _ = Describe("Chainlink Node", func() {
 			err = s.Client.Fund(
 				s.Wallets.Default(),
 				primaryEthKey.Attributes.Address,
-				big.NewInt(2000000000000000000), big.NewInt(2000000000000000000),
+				big.NewInt(100000000000000), big.NewInt(2000000000000000000),
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 		}
@@ -48,7 +49,7 @@ var _ = Describe("Chainlink Node", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		err = ocrInstance.SetConfig(s.Wallets.Default(), chainlinkNodes, contracts.DefaultOffChainAggregatorConfig())
 		Expect(err).ShouldNot(HaveOccurred())
-		err = ocrInstance.Fund(s.Wallets.Default(), big.NewInt(2000000000000000), big.NewInt(2000000000000000))
+		err = ocrInstance.Fund(s.Wallets.Default(), big.NewInt(100000000000000), big.NewInt(2000000000000000))
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// Create external adapter, returns 5 every time
@@ -119,7 +120,7 @@ var _ = Describe("Chainlink Node", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(answer.Int64()).Should(Equal(int64(5)))
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultOffChainAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultOffChainAggregatorOptions()),
 	)
 })
 
@@ -141,7 +142,7 @@ var _ = Describe("Contracts", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(val).To(Equal(value))
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, big.NewInt(5)),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, big.NewInt(5)),
 	)
 
 	DescribeTable("deploy and interact with the FluxAggregator contract", func(
@@ -169,7 +170,7 @@ var _ = Describe("Contracts", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(desc).To(Equal(fluxOptions.Description))
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultFluxAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultFluxAggregatorOptions()),
 	)
 
 	DescribeTable("deploy and interact with the OffChain Aggregator contract", func(
@@ -192,6 +193,6 @@ var _ = Describe("Contracts", func() {
 		err = offChainInstance.Fund(s.Wallets.Default(), nil, big.NewInt(50000000000))
 		Expect(err).ShouldNot(HaveOccurred())
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultOffChainAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultOffChainAggregatorOptions()),
 	)
 })

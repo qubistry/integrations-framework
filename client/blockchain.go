@@ -19,6 +19,8 @@ const (
 	EthereumHardhatID BlockchainNetworkID = "ethereum_hardhat"
 	EthereumKovanID   BlockchainNetworkID = "ethereum_kovan"
 	EthereumGoerliID  BlockchainNetworkID = "ethereum_goerli"
+	RskRegTestID      BlockchainNetworkID = "rsk_regtest"
+	RskTestnetID      BlockchainNetworkID = "rsk_testnet"
 )
 
 // BlockchainClient is the interface that wraps a given client implementation for a blockchain, to allow for switching
@@ -31,7 +33,7 @@ type BlockchainClient interface {
 // NewBlockchainClient returns an instantiated network client implementation based on the network configuration given
 func NewBlockchainClient(network BlockchainNetwork) (BlockchainClient, error) {
 	switch network.ID() {
-	case EthereumHardhatID, EthereumKovanID, EthereumGoerliID:
+	case EthereumHardhatID, EthereumKovanID, EthereumGoerliID, RskRegTestID, RskTestnetID:
 		return NewEthereumClient(network)
 	}
 	return nil, errors.New("invalid blockchain network ID, not found")
@@ -80,6 +82,16 @@ func NewKovanNetwork(conf *config.Config) (BlockchainNetwork, error) {
 // NewGoerliNetwork prepares settings for a connection to the Goerli testnet
 func NewGoerliNetwork(conf *config.Config) (BlockchainNetwork, error) {
 	return newEthereumNetwork(conf, EthereumGoerliID)
+}
+
+// NewRskRegTestNetwork prepares settings for a connection to an RSK development network
+func NewRskDevNetwork(conf *config.Config) (BlockchainNetwork, error) {
+	return newEthereumNetwork(conf, RskRegTestID)
+}
+
+// NewRskTestnetNetwork prepares settings for a connection to the RSK testnet
+func NewRskTestNetwork(conf *config.Config) (BlockchainNetwork, error) {
+	return newEthereumNetwork(conf, RskTestnetID)
 }
 
 // ID returns the readable name of the EVM network

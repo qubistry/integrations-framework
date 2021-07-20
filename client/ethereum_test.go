@@ -43,6 +43,6 @@ var _ = Describe("Ethereum functionality", func() {
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 	},
-		Entry("on Ethereum Hardhat", NewHardhatNetwork),
+		Entry("on Ethereum Hardhat", NewRskDevNetwork),
 	)
 })
