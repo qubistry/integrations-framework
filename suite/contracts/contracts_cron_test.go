@@ -44,6 +44,6 @@ var _ = Describe("Cronjob suite", func() {
 		})
 		Expect(err).ShouldNot(HaveOccurred())
 	},
-		Entry("on Ethereum Hardhat", client.NewHardhatNetwork, contracts.DefaultOffChainAggregatorOptions()),
+		Entry("on Ethereum Hardhat", client.NewRskDevNetwork, contracts.DefaultOffChainAggregatorOptions()),
 	)
 })
