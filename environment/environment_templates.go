@@ -17,11 +17,13 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Ports for common services
 const (
 	AdapterAPIPort   = 6060
 	ChainlinkWebPort = 6688
 	ChainlinkP2PPort = 6690
 	EVMRPCPort       = 8545
+	MinersRPCPort    = 9545
 	ExplorerAPIPort  = 8080
 	RSKRPCPort       = 4445
 )
@@ -253,6 +255,8 @@ func NewChainlinkCluster(nodeCount int) K8sEnvSpecInit {
 	return addNetworkManifestToDependencyGroup("basic-chainlink", dependencyGroup, chainlinkGroup)
 }
 
+// NewChainlinkClusterForAlertsTesting is a basic environment that deploys a chainlink cluster with dependencies
+// for testing alerts
 func NewChainlinkClusterForAlertsTesting(nodeCount int) K8sEnvSpecInit {
 	chainlinkGroup := &K8sManifestGroup{
 		id:        "chainlinkCluster",

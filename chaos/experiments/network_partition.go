@@ -1,16 +1,17 @@
 package experiments
 
-import (
-	"time"
-)
-
+// NetworkPartition struct with objects for Network Partition testing
 type NetworkPartition struct {
 	Base
-	AppLabel       string
-	TargetAppLabel string
-	Duration       time.Duration
+	FromMode       string
+	FromLabelKey   string
+	FromLabelValue string
+	ToMode         string
+	ToLabelKey     string
+	ToLabelValue   string
 }
 
+// SetBase sets the base
 func (e *NetworkPartition) SetBase(base Base) {
 	e.Base = base
 }
@@ -20,6 +21,7 @@ func (e *NetworkPartition) Resource() string {
 	return "networkchaos"
 }
 
+// Filename returns the network partition yaml
 func (e *NetworkPartition) Filename() string {
 	return "network-partition.yml"
 }
