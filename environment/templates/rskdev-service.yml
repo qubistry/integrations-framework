@@ -1,0 +1,10 @@
+metadata:
+  name: rskdev-network
+spec:
+  ports:
+  - name: access
+    port: {{ .Values.DependencyGroup.evm.rpcPort }}
+    targetPort: {{ .Values.DependencyGroup.evm.rpcPort }}
+  selector:
+    app: rskdev-network
+  type: ClusterIP

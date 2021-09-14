@@ -4,7 +4,7 @@
 # KEEP_ENVIRONMENTS=OnFail
 # APPS_CHAINLINK_VERSION=1.0.0
 
-network: "ethereum_geth" # Selected network for test execution
+network: "rsk_regtest" # Selected network for test execution
 keep_environments: Never # Options: Always, OnFail, Never
 
 apps:
@@ -167,6 +167,29 @@ networks:
         transaction_timeout: 5m
         minimum_confirmations: 1
         gas_estimation_buffer: 1000000
+    rsk_regtest:
+        name: "RSK RegTest"
+        chain_id: 33
+        type: evm
+        <<: *private_keys
+        transaction_limit: 9500000
+        transaction_timeout: 10s
+        minimum_confirmations: 1
+        gas_estimation_buffer: 0
+    rsk_testnet:
+        name: "RSK Testnet"
+        url: "wss://rsk.qubistry.co/websocket"
+        chain_id: 31
+        type: evm
+        secret_private_keys: true
+        <<: *namespace_for_secret_default
+        private_keys:
+            - rsk_testnet_private_key_1
+        transaction_limit: 9000000
+        transaction_timeout: 5m
+        minimum_confirmations: 1
+        gas_estimation_buffer: 100000
+        block_gas_limit: 40000000
 retry:
     attempts: 30
     linear_delay: 1s

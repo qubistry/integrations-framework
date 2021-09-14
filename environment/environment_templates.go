@@ -3,11 +3,12 @@ package environment
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 
 	"github.com/google/go-github/github"
 	"github.com/smartcontractkit/integrations-framework/config"
@@ -22,6 +23,7 @@ const (
 	ChainlinkP2PPort = 6690
 	EVMRPCPort       = 8545
 	ExplorerAPIPort  = 8080
+	RSKRPCPort       = 4445
 )
 
 // NewAdapterManifest is the k8s manifest that when used will deploy an external adapter to an environment
@@ -212,6 +214,28 @@ func NewGanacheManifest() *K8sManifest {
 	}
 }
 
+func NewRskDevManifest() *K8sManifest {
+	return &K8sManifest{
+		id:             "evm",
+		DeploymentFile: filepath.Join(tools.ProjectRoot, "/environment/templates/rskdev-deployment.yml"),
+		ServiceFile:    filepath.Join(tools.ProjectRoot, "/environment/templates/rskdev-service.yml"),
+
+		values: map[string]interface{}{
+			"rpcPort": RSKRPCPort,
+		},
+
+		SetValuesFunc: func(manifest *K8sManifest) error {
+			manifest.values["clusterURL"] = fmt.Sprintf(
+				"ws://%s:%d/websocket",
+				manifest.Service.Spec.ClusterIP,
+				manifest.Service.Spec.Ports[0].Port,
+			)
+			manifest.values["localURL"] = fmt.Sprintf("ws://127.0.0.1:%d/websocket", manifest.ports[0].Local)
+			return nil
+		},
+	}
+}
+
 // NewChainlinkCluster is a basic environment that deploys hardhat with a chainlink cluster and an external adapter
 func NewChainlinkCluster(nodeCount int) K8sEnvSpecInit {
 	chainlinkGroup := &K8sManifestGroup{
@@ -370,6 +394,10 @@ func addNetworkManifestToDependencyGroup(envName string, dependencyGroup *K8sMan
 			dependencyGroup.manifests = append(
 				dependencyGroup.manifests,
 				NewGanacheManifest())
+		case "RSK RegTest":
+			dependencyGroup.manifests = append(
+				dependencyGroup.manifests,
+				NewRskDevManifest())
 		default: // no simulated chain
 		}
 		if len(chainlinkGroup.manifests) > 0 {

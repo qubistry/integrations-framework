@@ -2,12 +2,13 @@ package environment
 
 import (
 	"fmt"
+	"net/http"
+	"net/url"
+
 	"github.com/rs/zerolog/log"
 	"github.com/smartcontractkit/integrations-framework/chaos"
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/config"
-	"net/http"
-	"net/url"
 )
 
 // Environment is the interface that represents a deployed environment, whether locally or on remote machines
@@ -143,19 +144,33 @@ func GetExternalAdapter(env Environment) (ExternalAdapter, error) {
 // deployed into the environment. If there's no deployed blockchain in the environment, the URL from the network
 // config will be used
 func NewBlockchainClient(env Environment, network client.BlockchainNetwork) (client.BlockchainClient, error) {
-	sd, err := env.GetServiceDetails(EVMRPCPort)
-	if err == nil {
-		url := fmt.Sprintf("ws://%s", sd.LocalURL.Host)
-		log.Debug().Str("URL", url).Msg("Selecting network")
-		network.SetURL(url)
-	}
+	if network.ChainID().String() == "33" || network.ChainID().String() == "31" {
+		sd, err := env.GetServiceDetails(RSKRPCPort)
+		if err == nil {
+			url := fmt.Sprintf("ws://%s/websocket", sd.LocalURL.Host)
+			log.Debug().Str("URL", url).Msg("Selecting network")
+			network.SetURL(url)
+		}
+		network.Config().PrivateKeyStore, err = NewPrivateKeyStoreFromEnv(env, network.Config())
+		if err != nil {
+			return nil, err
+		}
 
-	network.Config().PrivateKeyStore, err = NewPrivateKeyStoreFromEnv(env, network.Config())
-	if err != nil {
-		return nil, err
-	}
+		return client.NewBlockchainClient(network)
+	} else {
+		sd, err := env.GetServiceDetails(EVMRPCPort)
+		if err == nil {
+			url := fmt.Sprintf("ws://%s", sd.LocalURL.Host)
+			log.Debug().Str("URL", url).Msg("Selecting network")
+			network.SetURL(url)
+		}
+		network.Config().PrivateKeyStore, err = NewPrivateKeyStoreFromEnv(env, network.Config())
+		if err != nil {
+			return nil, err
+		}
 
-	return client.NewBlockchainClient(network)
+		return client.NewBlockchainClient(network)
+	}
 }
 
 // NewPrivateKeyStoreFromEnv returns a keystore looking either in a cluster secret or directly from the config
