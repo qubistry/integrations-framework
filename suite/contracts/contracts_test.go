@@ -4,8 +4,9 @@ import (
 	"context"
 	"math/big"
 
-	"github.com/smartcontractkit/integrations-framework/actions"
 	"github.com/smartcontractkit/integrations-framework/contracts"
+
+	"github.com/smartcontractkit/integrations-framework/actions"
 	"github.com/smartcontractkit/integrations-framework/environment"
 	"github.com/smartcontractkit/integrations-framework/tools"
 
@@ -15,7 +16,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Basic Contract Interactions @contract", func() {
+var _ = FDescribe("Basic Contract Interactions @contract", func() {
 	var suiteSetup *actions.DefaultSuiteSetup
 	var defaultWallet client.BlockchainWallet
 

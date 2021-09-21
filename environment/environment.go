@@ -24,7 +24,7 @@ type Environment interface {
 
 	GetAllServiceDetails(remotePort uint16) ([]*ServiceDetails, error)
 	GetServiceDetails(remotePort uint16) (*ServiceDetails, error)
-	GetPrivateKeyFromSecret(namespace string, privateKey string) (string, error)
+	GetSecretField(namespace string, secretName string, privateKey string) (string, error)
 
 	WriteArtifacts(testLogFolder string)
 	ApplyChaos(exp chaos.Experimentable) (string, error)
@@ -151,17 +151,19 @@ func GetExternalAdapter(env Environment) (ExternalAdapter, error) {
 // deployed into the environment. If there's no deployed blockchain in the environment, the URL from the network
 // config will be used
 func NewBlockchainClient(env Environment, network client.BlockchainNetwork) (client.BlockchainClient, error) {
-	if network.ChainID().String() == "33" || network.ChainID().String() == "31" {
-		sd, err := env.GetServiceDetails(RSKRPCPort)
-		if err == nil {
-			url := fmt.Sprintf("ws://%s/websocket", sd.LocalURL.Host)
-			log.Debug().Str("URL", url).Msg("Selecting network")
-			network.SetURL(url)
-		}
-		network.Config().PrivateKeyStore, err = NewPrivateKeyStoreFromEnv(env, network.Config())
+	sd, err := env.GetServiceDetails(EVMRPCPort)
+	if err == nil {
+		url := fmt.Sprintf("ws://%s", sd.LocalURL.Host)
+		log.Debug().Str("URL", url).Msg("Selecting network")
+		network.SetURL(url)
+	}
+	if network.Config().SecretPrivateURL {
+		purl, err := env.GetSecretField(network.Config().NamespaceForSecret, PrivateNetworksInfoSecret, network.Config().PrivateURL)
 		if err != nil {
 			return nil, err
 		}
+		network.SetURL(purl)
+	}
 
 		return client.NewBlockchainClient(network)
 	} else {
@@ -213,7 +215,7 @@ func NewPrivateKeyStoreFromEnv(env Environment, network *config.NetworkConfig) (
 
 	if network.SecretPrivateKeys {
 		for _, key := range network.PrivateKeys {
-			secretKey, err := env.GetPrivateKeyFromSecret(network.NamespaceForSecret, key)
+			secretKey, err := env.GetSecretField(network.NamespaceForSecret, PrivateNetworksInfoSecret, key)
 			if err != nil {
 				return nil, err
 			}
