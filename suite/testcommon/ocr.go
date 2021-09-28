@@ -2,9 +2,14 @@ package testcommon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
+	"path/filepath"
 	"time"
+
+	"github.com/smartcontractkit/integrations-framework/environment/charts/mockserver"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -25,10 +30,11 @@ type OCRSetupInputs struct {
 }
 
 // DeployOCRForEnv deploys the environment
-func DeployOCRForEnv(i *OCRSetupInputs, envInit environment.K8sEnvSpecInit) {
+func DeployOCRForEnv(i *OCRSetupInputs, envName string, envInit environment.K8sEnvSpecInit) {
 	By("Deploying the environment", func() {
 		var err error
 		i.SuiteSetup, err = actions.DefaultLocalSetup(
+			envName,
 			envInit,
 			client.NewNetworkFromConfig,
 			tools.ProjectRoot,
@@ -46,11 +52,13 @@ func DeployOCRForEnv(i *OCRSetupInputs, envInit environment.K8sEnvSpecInit) {
 // SetupOCRTest setup for an ocr test
 func SetupOCRTest(i *OCRSetupInputs) {
 	By("Funding nodes and deploying OCR contract", func() {
-		err := actions.FundChainlinkNodes(
+		ethAmount, err := i.SuiteSetup.Deployer.CalculateETHForTXs(i.SuiteSetup.Wallets.Default(), i.SuiteSetup.Network.Config(), 2)
+		Expect(err).ShouldNot(HaveOccurred())
+		err = actions.FundChainlinkNodes(
 			i.ChainlinkNodes,
 			i.SuiteSetup.Client,
 			i.DefaultWallet,
-			big.NewFloat(.0005),
+			ethAmount,
 			big.NewFloat(2),
 		)
 		Expect(err).ShouldNot(HaveOccurred())
@@ -158,4 +166,53 @@ func CheckRound(i *OCRSetupInputs) {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(answer.Int64()).Should(Equal(int64(10)), "Latest answer from OCR is not as expected")
 	})
+}
+
+// WriteDataForOTPEToInitializerFileForMockserver Write to initializerJson mocked weiwatchers data needed for otpe
+func WriteDataForOTPEToInitializerFileForMockserver(i *OCRSetupInputs) {
+	contractInfo := mockserver.ContractInfoJSON{
+		ContractVersion: 4,
+		Path:            "test",
+		Status:          "live",
+		ContractAddress: i.OCRInstance.Address(),
+	}
+
+	contractsInfo := []mockserver.ContractInfoJSON{contractInfo}
+
+	contractsInitializer := mockserver.HttpInitializer{
+		Request:  mockserver.HttpRequest{Path: "/contracts.json"},
+		Response: mockserver.HttpResponse{Body: contractsInfo},
+	}
+
+	var nodesInfo []mockserver.NodeInfoJSON
+
+	for _, chainlink := range i.ChainlinkNodes {
+		ocrKeys, err := chainlink.ReadOCRKeys()
+		Expect(err).ShouldNot(HaveOccurred())
+		nodeInfo := mockserver.NodeInfoJSON{
+			NodeAddress: []string{ocrKeys.Data[0].Attributes.OnChainSigningAddress},
+			ID:          ocrKeys.Data[0].ID,
+		}
+		nodesInfo = append(nodesInfo, nodeInfo)
+	}
+
+	nodesInitializer := mockserver.HttpInitializer{
+		Request:  mockserver.HttpRequest{Path: "/nodes.json"},
+		Response: mockserver.HttpResponse{Body: nodesInfo},
+	}
+	initializers := []mockserver.HttpInitializer{contractsInitializer, nodesInitializer}
+
+	initializersBytes, err := json.Marshal(initializers)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	fileName := filepath.Join(tools.ProjectRoot, "environment/charts/mockserver-config/static/initializerJson.json")
+	f, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	body := string(initializersBytes)
+	_, err = f.WriteString(body)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	err = f.Close()
+	Expect(err).ShouldNot(HaveOccurred())
 }

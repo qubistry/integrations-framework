@@ -35,6 +35,7 @@ var _ = Describe("Direct request suite @runlog", func() {
 	BeforeEach(func() {
 		By("Deploying the environment", func() {
 			s, err = actions.DefaultLocalSetup(
+				"basic-chainlink",
 				environment.NewChainlinkCluster(1),
 				client.NewNetworkFromConfig,
 				tools.ProjectRoot,
@@ -49,7 +50,9 @@ var _ = Describe("Direct request suite @runlog", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			nodeAddresses, err = actions.ChainlinkNodeAddresses(nodes)
 			Expect(err).ShouldNot(HaveOccurred())
-			err = actions.FundChainlinkNodes(nodes, s.Client, s.Wallets.Default(), big.NewFloat(2), nil)
+			ethAmount, err := s.Deployer.CalculateETHForTXs(s.Wallets.Default(), s.Network.Config(), 1)
+			Expect(err).ShouldNot(HaveOccurred())
+			err = actions.FundChainlinkNodes(nodes, s.Client, s.Wallets.Default(), ethAmount, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 
@@ -131,6 +134,9 @@ var _ = Describe("Direct request suite @runlog", func() {
 	})
 
 	AfterEach(func() {
+		By("Calculating gas costs", func() {
+			s.Client.GasStats().PrintStats()
+		})
 		By("Tearing down the environment", s.TearDown())
 	})
 })

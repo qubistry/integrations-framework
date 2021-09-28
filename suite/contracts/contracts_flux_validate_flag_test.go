@@ -20,7 +20,7 @@ import (
 	"github.com/smartcontractkit/integrations-framework/environment"
 )
 
-var _ = Describe("Flux monitor external validator suite @flux", func() {
+var _ = Describe("Flux monitor external validator suite @validator-flux", func() {
 	var (
 		s                  *actions.DefaultSuiteSetup
 		adapter            environment.ExternalAdapter
@@ -39,6 +39,7 @@ var _ = Describe("Flux monitor external validator suite @flux", func() {
 	BeforeEach(func() {
 		By("Deploying the environment", func() {
 			s, err = actions.DefaultLocalSetup(
+				"basic-chainlink",
 				environment.NewChainlinkCluster(3),
 				client.NewNetworkFromConfig,
 				tools.ProjectRoot,

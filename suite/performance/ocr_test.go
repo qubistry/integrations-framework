@@ -1,9 +1,6 @@
 package performance
 
 import (
-	"math/big"
-	"time"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/smartcontractkit/integrations-framework/actions"
@@ -11,72 +8,71 @@ import (
 	"github.com/smartcontractkit/integrations-framework/contracts"
 	"github.com/smartcontractkit/integrations-framework/environment"
 	"github.com/smartcontractkit/integrations-framework/tools"
+	"math/big"
+	"time"
 )
 
-var _ = Describe("Performance tests", func() {
+var _ = Describe("OCR soak test @soak-ocr", func() {
 	var (
 		s        *actions.DefaultSuiteSetup
 		nodes    []client.Chainlink
+		adapter  environment.ExternalAdapter
 		perfTest Test
 		err      error
 	)
-	numberOfRounds := int64(5)
-	numberOfNodes := 5
 
 	BeforeEach(func() {
 		By("Deploying the environment", func() {
 			s, err = actions.DefaultLocalSetup(
-				"basic-chainlink",
-				environment.NewChainlinkCluster(numberOfNodes),
-				client.NewNetworkFromConfigWithDefault(client.NetworkGethPerformance),
+				"ocr-soak",
+				environment.NewChainlinkCluster(5),
+				client.NewNetworkFromConfig,
 				tools.ProjectRoot,
 			)
 			Expect(err).ShouldNot(HaveOccurred())
+			adapter, err = environment.GetExternalAdapter(s.Env)
+			Expect(err).ShouldNot(HaveOccurred())
 			nodes, err = environment.GetChainlinkClients(s.Env)
 			Expect(err).ShouldNot(HaveOccurred())
-
 			s.Client.ParallelTransactions(true)
 		})
 
 		By("Funding the Chainlink nodes", func() {
-			err = actions.FundChainlinkNodes(
+			err := actions.FundChainlinkNodes(
 				nodes,
 				s.Client,
 				s.Wallets.Default(),
-				big.NewFloat(.0005),
-				nil,
+				big.NewFloat(10),
+				big.NewFloat(10),
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 
-		By("Setting up the FluxAggregator performance test", func() {
-			perfTest = NewFluxTest(
-				FluxTestOptions{
+		By("Setting up the OCR soak test", func() {
+			perfTest = NewOCRTest(
+				OCRTestOptions{
 					TestOptions: TestOptions{
-						NumberOfContracts: 100,
-						NumberOfRounds:    numberOfRounds,
+						NumberOfContracts: 5,
 					},
-					RequiredSubmissions: numberOfNodes,
-					RestartDelayRounds:  0,
-					NodePollTimePeriod:  time.Second * 15,
+					RoundTimeout: 180 * time.Second,
+					AdapterValue: 5,
+					TestDuration: 10 * time.Minute,
 				},
-				contracts.DefaultFluxAggregatorOptions(),
+				contracts.DefaultOffChainAggregatorOptions(),
 				s.Env,
 				s.Client,
 				s.Wallets,
 				s.Deployer,
-				nil,
+				adapter,
 			)
 			err = perfTest.Setup()
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 	})
 
-	Describe("FluxMonitor", func() {
-		Measure("Round latencies", func(b Benchmarker) {
+	Describe("OCR Soak test", func() {
+		Measure("Measure OCR rounds", func(_ Benchmarker) {
 			err = perfTest.Run()
-			Expect(err).ShouldNot(HaveOccurred())
-			err = perfTest.RecordValues(b)
 			Expect(err).ShouldNot(HaveOccurred())
 		}, 1)
 	})

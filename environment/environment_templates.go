@@ -3,6 +3,7 @@ package environment
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -170,6 +171,67 @@ func NewExplorerManifest(nodeCount int) *K8sManifest {
 	}
 }
 
+// NewOTPEManifest is the k8s manifest for deploying otpe
+func NewOTPEManifest() *K8sManifest {
+	return &K8sManifest{
+		id:             "otpe",
+		DeploymentFile: filepath.Join(tools.ProjectRoot, "/environment/templates/otpe-deployment.yml"),
+		ServiceFile:    filepath.Join(tools.ProjectRoot, "/environment/templates/otpe-service.yml"),
+		SetValuesFunc: func(manifest *K8sManifest) error {
+			manifest.values["clusterURL"] = fmt.Sprintf(
+				"%s:%d",
+				manifest.Service.Spec.ClusterIP,
+				manifest.Service.Spec.Ports[0].Port,
+			)
+			return nil
+		},
+	}
+}
+
+// NewMockserverConfigHelmChart creates new helm chart for the mockserver configmap
+func NewMockserverConfigHelmChart() *HelmChart {
+	return &HelmChart{
+		id:          "mockserver-config",
+		chartPath:   filepath.Join(tools.ProjectRoot, "environment/charts/mockserver-config"),
+		releaseName: "mockserver-config",
+	}
+}
+
+// NewMockserverHelmChart creates new helm chart for the mockserver
+func NewMockserverHelmChart() *HelmChart {
+	chart := &HelmChart{
+		id:          "mockserver",
+		chartPath:   filepath.Join(tools.ProjectRoot, "environment/charts/mockserver/mockserver-5.11.1.tgz"),
+		releaseName: "mockserver",
+		values:      map[string]interface{}{},
+		SetValuesHelmFunc: func(manifest *HelmChart) error {
+			manifest.values["contractsURL"] = "http://mockserver:1080/contracts.json"
+			manifest.values["nodesURL"] = "http://mockserver:1080/nodes.json"
+			return nil
+		},
+	}
+	return chart
+}
+
+// NewPrometheusManifest creates new k8s manifest for prometheus
+func NewPrometheusManifest() *K8sManifest {
+	rulesFilePath := filepath.Join(tools.ProjectRoot, "/environment/templates/prometheus/rules/ocr.rules.yml")
+	content, err := ioutil.ReadFile(rulesFilePath)
+	if err != nil {
+		return nil
+	}
+	return &K8sManifest{
+		id:             "prometheus",
+		DeploymentFile: filepath.Join(tools.ProjectRoot, "/environment/templates/prometheus/prometheus-deployment.yml"),
+		ServiceFile:    filepath.Join(tools.ProjectRoot, "/environment/templates/prometheus/prometheus-service.yml"),
+		ConfigMapFile:  filepath.Join(tools.ProjectRoot, "/environment/templates/prometheus/prometheus-config-map.yml"),
+
+		values: map[string]interface{}{
+			"ocrRulesYml": string(content),
+		},
+	}
+}
+
 // NewHardhatManifest is the k8s manifest that when used will deploy hardhat to an environment
 func NewHardhatManifest() *K8sManifest {
 	return &K8sManifest{
@@ -278,8 +340,8 @@ func NewChainlinkClusterForAlertsTesting(nodeCount int) K8sEnvSpecInit {
 	dependencyGroup := getBasicDependencyGroup()
 	addServicesForTestingAlertsToDependencyGroup(dependencyGroup, nodeCount)
 	addPostgresDbsToDependencyGroup(dependencyGroup, nodeCount)
-
 	dependencyGroups := []*K8sManifestGroup{kafkaDependecyGroup, dependencyGroup}
+
 	return addNetworkManifestToDependencyGroup("basic-chainlink", chainlinkGroup, dependencyGroups)
 }
 
@@ -467,4 +529,45 @@ func addPostgresDbsToDependencyGroup(dependencyGroup *K8sManifestGroup, postgres
 // addServicesForTestingAlertsToDependencyGroup adds services necessary for testing alerts to the dependency group
 func addServicesForTestingAlertsToDependencyGroup(dependencyGroup *K8sManifestGroup, nodeCount int) {
 	dependencyGroup.manifests = append(dependencyGroup.manifests, NewExplorerManifest(nodeCount))
+}
+
+// OtpeGroup contains manifests for mockserver, mockserver-config, and otpe
+func OtpeGroup() K8sEnvSpecInit {
+	return func(config *config.NetworkConfig) (string, K8sEnvSpecs) {
+		var specs K8sEnvSpecs
+		mockserverConfigDependencyGroup := &K8sManifestGroup{
+			id:        "MockserverConfigDependencyGroup",
+			manifests: []K8sEnvResource{NewMockserverConfigHelmChart()},
+		}
+
+		mockserverDependencyGroup := &K8sManifestGroup{
+			id:        "MockserverDependencyGroup",
+			manifests: []K8sEnvResource{NewMockserverHelmChart()},
+		}
+
+		specs = append(specs, mockserverConfigDependencyGroup)
+		specs = append(specs, mockserverDependencyGroup)
+
+		otpeDependencyGroup := &K8sManifestGroup{
+			id:        "OTPEDependencyGroup",
+			manifests: []K8sEnvResource{NewOTPEManifest()},
+		}
+
+		specs = append(specs, otpeDependencyGroup)
+
+		return "envName", specs
+	}
+}
+
+// PrometheusGroup contains manifests for prometheus
+func PrometheusGroup() K8sEnvSpecInit {
+	return func(config *config.NetworkConfig) (string, K8sEnvSpecs) {
+		var specs K8sEnvSpecs
+		prometheusDependencyGroup := &K8sManifestGroup{
+			id:        "PrometheusDependencyGroup",
+			manifests: []K8sEnvResource{NewPrometheusManifest()},
+		}
+		specs = append(specs, prometheusDependencyGroup)
+		return "", specs
+	}
 }

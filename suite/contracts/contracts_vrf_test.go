@@ -31,6 +31,7 @@ var _ = Describe("VRF suite @vrf", func() {
 	BeforeEach(func() {
 		By("Deploying the environment", func() {
 			s, err = actions.DefaultLocalSetup(
+				"basic-chainlink",
 				environment.NewChainlinkCluster(1),
 				client.NewNetworkFromConfig,
 				tools.ProjectRoot,
@@ -42,7 +43,9 @@ var _ = Describe("VRF suite @vrf", func() {
 			s.Client.ParallelTransactions(true)
 		})
 		By("Funding Chainlink nodes", func() {
-			err = actions.FundChainlinkNodes(nodes, s.Client, s.Wallets.Default(), big.NewFloat(2), nil)
+			ethAmount, err := s.Deployer.CalculateETHForTXs(s.Wallets.Default(), s.Network.Config(), 1)
+			Expect(err).ShouldNot(HaveOccurred())
+			err = actions.FundChainlinkNodes(nodes, s.Client, s.Wallets.Default(), ethAmount, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 		By("Deploying VRF contracts", func() {
@@ -119,6 +122,9 @@ var _ = Describe("VRF suite @vrf", func() {
 		})
 	})
 	AfterEach(func() {
+		By("Printing gas stats", func() {
+			s.Client.GasStats().PrintStats()
+		})
 		By("Tearing down the environment", s.TearDown())
 	})
 })

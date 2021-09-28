@@ -31,6 +31,7 @@ var _ = Describe("Keeper suite @keeper", func() {
 	BeforeEach(func() {
 		By("Deploying the environment", func() {
 			s, err = actions.DefaultLocalSetup(
+				"basic-chainlink",
 				// need to register at least 5 nodes to perform upkeep
 				environment.NewChainlinkCluster(5),
 				client.NewNetworkFromConfig,
@@ -45,11 +46,13 @@ var _ = Describe("Keeper suite @keeper", func() {
 			s.Client.ParallelTransactions(true)
 		})
 		By("Funding Chainlink nodes", func() {
+			ethAmount, err := s.Deployer.CalculateETHForTXs(s.Wallets.Default(), s.Network.Config(), 10)
+			Expect(err).ShouldNot(HaveOccurred())
 			err = actions.FundChainlinkNodes(
 				nodes,
 				s.Client,
 				s.Wallets.Default(),
-				big.NewFloat(2),
+				ethAmount,
 				big.NewFloat(1),
 			)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -161,6 +164,9 @@ var _ = Describe("Keeper suite @keeper", func() {
 		})
 	})
 	AfterEach(func() {
+		By("Printing gas stats", func() {
+			s.Client.GasStats().PrintStats()
+		})
 		By("Tearing down the environment", s.TearDown())
 	})
 })
