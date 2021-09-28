@@ -4,7 +4,7 @@
 # KEEP_ENVIRONMENTS=OnFail
 # APPS_CHAINLINK_VERSION=1.0.0
 
-network: "rsk_regtest" # Selected network for test execution
+network: "rsk_testnet" # Selected network for test execution
 keep_environments: Never # Options: Always, OnFail, Never
 
 apps:
@@ -178,13 +178,30 @@ networks:
         private_url: optimism_kovan_url
         private_keys:
             - optimism_kovan_1
+    rsk_regtest:
+        name: "RSK RegTest"
+        chain_id: 33
+        type: evm
+        secret_private_keys: false
+        namespace_for_secret: default
+        <<: *private_keys
+        transaction_limit: 6800000
+        transaction_timeout: 10s
+        minimum_confirmations: 1
+        gas_estimation_buffer: 0
     rsk_testnet:
         <<: *common_ethereum_testnet
         name: "RSK testnet"
         chain_id: 31
+        type: evm
+        url: "wss://rsk.qubistry.co/websocket"
         private_url: rsk_testnet_url
         private_keys:
-            - rsk_testnet_1
+            - rsk_testnet_private_key_1
+        transaction_limit: 6200000
+        transaction_timeout: 10m
+        gas_estimation_buffer: 0
+        link_token_address: "0x8bbbd80981fe76d44854d8df305e8985c19f0e78"
 retry:
     attempts: 30
     linear_delay: 1s

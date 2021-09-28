@@ -50,7 +50,7 @@ func SetupOCRTest(i *OCRSetupInputs) {
 			i.ChainlinkNodes,
 			i.SuiteSetup.Client,
 			i.DefaultWallet,
-			big.NewFloat(0.05),
+			big.NewFloat(.0005),
 			big.NewFloat(2),
 		)
 		Expect(err).ShouldNot(HaveOccurred())

@@ -1,6 +1,9 @@
 package performance
 
 import (
+	"math/big"
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/smartcontractkit/integrations-framework/actions"
@@ -8,8 +11,6 @@ import (
 	"github.com/smartcontractkit/integrations-framework/contracts"
 	"github.com/smartcontractkit/integrations-framework/environment"
 	"github.com/smartcontractkit/integrations-framework/tools"
-	"math/big"
-	"time"
 )
 
 var _ = Describe("Performance tests", func() {
@@ -41,7 +42,7 @@ var _ = Describe("Performance tests", func() {
 				nodes,
 				s.Client,
 				s.Wallets.Default(),
-				big.NewFloat(2),
+				big.NewFloat(.0005),
 				nil,
 			)
 			Expect(err).ShouldNot(HaveOccurred())

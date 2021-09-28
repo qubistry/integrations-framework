@@ -94,6 +94,11 @@ func (e *EthereumContractDeployer) DeployReadAccessController(
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeploySimpleReadAccessController(auth, backend)
 	})
 	if err != nil {
@@ -116,6 +121,11 @@ func (e *EthereumContractDeployer) DeployFlags(
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		racAddr := common.HexToAddress(rac)
 		return ethereum.DeployFlags(auth, backend, racAddr)
 	})
@@ -140,6 +150,11 @@ func (e *EthereumContractDeployer) DeployDeviationFlaggingValidator(
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		flagAddr := common.HexToAddress(flags)
 		return ethereum.DeployDeviationFlaggingValidator(auth, backend, flagAddr, flaggingThreshold)
 	})
@@ -163,6 +178,11 @@ func (e *EthereumContractDeployer) DeployFluxAggregatorContract(
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		linkAddress := common.HexToAddress(e.eth.Network.Config().LinkTokenAddress)
 		return ethereum.DeployFluxAggregator(auth,
 			backend,
@@ -192,6 +212,11 @@ func (e *EthereumContractDeployer) DeployLinkTokenContract(fromWallet client.Blo
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployLinkToken(auth, backend)
 	})
 	if err != nil {
@@ -259,6 +284,11 @@ func (e *EthereumContractDeployer) DeployOffChainAggregator(
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		linkAddress := common.HexToAddress(e.eth.Network.Config().LinkTokenAddress)
 		return ethereum.DeployOffchainAggregator(auth,
 			backend,
@@ -292,6 +322,11 @@ func (e *EthereumContractDeployer) DeployStorageContract(fromWallet client.Block
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployStore(auth, backend)
 	})
 	if err != nil {
@@ -310,6 +345,11 @@ func (e *EthereumContractDeployer) DeployAPIConsumer(fromWallet client.Blockchai
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployAPIConsumer(auth, backend, common.HexToAddress(linkAddr))
 	})
 	if err != nil {
@@ -329,6 +369,11 @@ func (e *EthereumContractDeployer) DeployOracle(fromWallet client.BlockchainWall
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployOracle(auth, backend, common.HexToAddress(linkAddr))
 	})
 	if err != nil {
@@ -348,6 +393,11 @@ func (e *EthereumContractDeployer) DeployVRFContract(fromWallet client.Blockchai
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployVRF(auth, backend)
 	})
 	if err != nil {
@@ -366,6 +416,11 @@ func (e *EthereumContractDeployer) DeployMockETHLINKFeed(fromWallet client.Block
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployMockETHLINKAggregator(auth, backend, answer)
 	})
 	if err != nil {
@@ -384,6 +439,11 @@ func (e *EthereumContractDeployer) DeployMockGasFeed(fromWallet client.Blockchai
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployMockGASAggregator(auth, backend, answer)
 	})
 	if err != nil {
@@ -402,6 +462,11 @@ func (e *EthereumContractDeployer) DeployUpkeepRegistrationRequests(fromWallet c
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployUpkeepRegistrationRequests(auth, backend, common.HexToAddress(linkAddr), minLinkJuels)
 	})
 	if err != nil {
@@ -423,6 +488,11 @@ func (e *EthereumContractDeployer) DeployKeeperRegistry(
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployKeeperRegistry(
 			auth,
 			backend,
@@ -454,6 +524,11 @@ func (e *EthereumContractDeployer) DeployKeeperConsumer(fromWallet client.Blockc
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployKeeperConsumer(auth, backend, updateInterval)
 	})
 	if err != nil {
@@ -473,6 +548,11 @@ func (e *EthereumContractDeployer) DeployBlockhashStore(fromWallet client.Blockc
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployBlockhashStore(auth, backend)
 	})
 	if err != nil {
@@ -492,6 +572,11 @@ func (e *EthereumContractDeployer) DeployVRFCoordinator(fromWallet client.Blockc
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployVRFCoordinator(auth, backend, common.HexToAddress(linkAddr), common.HexToAddress(bhsAddr))
 	})
 	if err != nil {
@@ -511,6 +596,11 @@ func (e *EthereumContractDeployer) DeployVRFConsumer(fromWallet client.Blockchai
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
 	) (common.Address, *types.Transaction, interface{}, error) {
+		gasPrice, err := e.eth.AdjustGasPrice()
+		if err != nil {
+			return common.Address{}, nil, nil, err
+		}
+		auth.GasPrice = gasPrice
 		return ethereum.DeployVRFConsumer(auth, backend, common.HexToAddress(coordinatorAddr), common.HexToAddress(linkAddr))
 	})
 	if err != nil {

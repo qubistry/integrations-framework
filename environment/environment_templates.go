@@ -3,12 +3,13 @@ package environment
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
-	"helm.sh/helm/v3/pkg/chartutil"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
+	"helm.sh/helm/v3/pkg/chartutil"
 
 	"github.com/google/go-github/github"
 	"github.com/smartcontractkit/integrations-framework/config"
@@ -357,14 +358,14 @@ func NewKafkaHelmChart() *HelmChart {
 		id:          "kafka",
 		chartPath:   filepath.Join(tools.ProjectRoot, "environment/charts/kafka/kafka-14.1.0.tgz"),
 		releaseName: "kafka",
-		values: map[string]interface{}{},
+		values:      map[string]interface{}{},
 		SetValuesHelmFunc: func(manifest *HelmChart) error {
 			manifest.values["clusterURL"] = "kafka:9092"
 			return nil
 		},
 	}
 
-	for index, element  := range overrideValues{
+	for index, element := range overrideValues {
 		chart.values[index] = element
 	}
 
@@ -437,8 +438,8 @@ func addNetworkManifestToDependencyGroup(envName string, chainlinkGroup *K8sMani
 				dependencyGroups[indexOfLastElementInDependencyGroups].manifests,
 				NewGanacheManifest())
 		case "RSK RegTest":
-			dependencyGroup.manifests = append(
-				dependencyGroup.manifests,
+			dependencyGroups[indexOfLastElementInDependencyGroups].manifests = append(
+				dependencyGroups[indexOfLastElementInDependencyGroups].manifests,
 				NewRskDevManifest())
 		default: // no simulated chain
 		}

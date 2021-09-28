@@ -291,7 +291,7 @@ func (e *EthereumClient) Get() interface{} {
 
 // CalculateTxGas calculates tx gas cost accordingly gas used plus buffer, converts it to big.Float for funding
 func (e *EthereumClient) CalculateTxGas(gasUsed *big.Int) (*big.Float, error) {
-	gp, err := e.Client.SuggestGasPrice(context.Background())
+	gp, err := e.AdjustGasPrice()
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +382,13 @@ func (e *EthereumClient) SendTransaction(
 	if err != nil {
 		return common.Hash{}, err
 	}
-
+	if *callMsg.To != common.HexToAddress("0x0000000000000000000000000000000000000000") {
+		gasLimit, err := e.Client.EstimateGas(context.Background(), *callMsg)
+		if err != nil {
+			return common.Hash{}, err
+		}
+		callMsg.Gas = uint64(float64(gasLimit) * 1.2)
+	}
 	tx, err := types.SignNewTx(privateKey, types.NewEIP2930Signer(e.Network.ChainID()), &types.LegacyTx{
 		To:       callMsg.To,
 		Value:    callMsg.Value,
@@ -453,7 +459,7 @@ func (e *EthereumClient) TransactionCallMessage(
 	value *big.Int,
 	data []byte,
 ) (*ethereum.CallMsg, error) {
-	gasPrice, err := e.Client.SuggestGasPrice(context.Background())
+	gasPrice, err := e.AdjustGasPrice()
 	if err != nil {
 		return nil, err
 	}
@@ -729,4 +735,19 @@ func (i *InstantConfirmations) ReceiveBlock(block NodeBlock) error {
 // Wait is a no-op
 func (i *InstantConfirmations) Wait() error {
 	return nil
+}
+
+func (e *EthereumClient) AdjustGasPrice() (*big.Int, error) {
+	gasPrice, err := e.Client.SuggestGasPrice(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	chainId := e.Network.ChainID()
+	if chainId.String() == "30" || chainId.String() == "31" || chainId.String() == "33" {
+		x, y, z := big.NewInt(0), big.NewInt(0), big.NewInt(0)
+		x.Add(gasPrice, y.Div(z.Mul(gasPrice, big.NewInt(4)), big.NewInt(100)))
+		return x, nil
+	} else {
+		return gasPrice, nil
+	}
 }

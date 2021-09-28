@@ -34,7 +34,7 @@ spec:
         - name: DATABASE_NAME
           value: chainlink
         - name: ETH_URL
-          value: {{ if .Values.DependencyGroup.evm.clusterURL }}{{ .Values.DependencyGroup.evm.clusterURL }}{{ else }}{{ .Network.URL }}{{ end }}
+          value: {{ if .Network.URL }}{{ .Network.URL }}{{ else }}{{ .Values.DependencyGroup.evm.clusterURL }}{{ end }}
         - name: ETH_CHAIN_ID
           value: {{ .Network.ChainID }}
         - name: ALLOW_ORIGINS

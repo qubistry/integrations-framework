@@ -142,7 +142,7 @@ var _ = Describe("FluxAggregator ETH Refill @refill", func() {
 
 	Describe("with FluxAggregator", func() {
 		It("should refill and await the next round", func() {
-			err = actions.FundChainlinkNodes(nodes, s.Client, s.Wallets.Default(), big.NewFloat(2), nil)
+			err = actions.FundChainlinkNodes(nodes, s.Client, s.Wallets.Default(), big.NewFloat(.0005), nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			err = s.Client.WaitForEvents()
 			Expect(err).ShouldNot(HaveOccurred())

@@ -3,9 +3,10 @@ package testcommon
 import (
 	"context"
 	"fmt"
-	"github.com/avast/retry-go"
 	"math/big"
 	"strings"
+
+	"github.com/avast/retry-go"
 
 	"github.com/ethereum/go-ethereum/common"
 	. "github.com/onsi/ginkgo"
@@ -53,7 +54,7 @@ func SetupRunlogTest(i *RunlogSetupInputs) {
 		Expect(i.Err).ShouldNot(HaveOccurred())
 		i.NodeAddresses, i.Err = actions.ChainlinkNodeAddresses(i.Nodes)
 		Expect(i.Err).ShouldNot(HaveOccurred())
-		i.Err = actions.FundChainlinkNodes(i.Nodes, i.S.Client, i.S.Wallets.Default(), big.NewFloat(2), nil)
+		i.Err = actions.FundChainlinkNodes(i.Nodes, i.S.Client, i.S.Wallets.Default(), big.NewFloat(.0005), nil)
 		Expect(i.Err).ShouldNot(HaveOccurred())
 	})
 	By("Deploying and funding the contracts", func() {
