@@ -2,16 +2,18 @@ package actions
 
 import (
 	"fmt"
-	"github.com/smartcontractkit/integrations-framework/hooks"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/smartcontractkit/integrations-framework/hooks"
+
 	"github.com/onsi/ginkgo"
 	"github.com/rs/zerolog/log"
 
 	"github.com/avast/retry-go"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/config"
 	"github.com/smartcontractkit/integrations-framework/contracts"
@@ -53,17 +55,32 @@ func NewNetworkInfo(
 	if err != nil {
 		return NetworkInfo{}, err
 	}
-	link, err := contractDeployer.DeployLinkTokenContract(wallets.Default())
-	if err != nil {
-		return NetworkInfo{}, err
+	linkAddress := common.HexToAddress(network.Config().LinkTokenAddress)
+	if linkAddress != common.HexToAddress("") {
+		link, err := contractDeployer.InstanceLinkTokenContract(wallets.Default(), linkAddress)
+		if err != nil {
+			return NetworkInfo{}, err
+		}
+		return NetworkInfo{
+			Client:   bcc,
+			Wallets:  wallets,
+			Deployer: contractDeployer,
+			Link:     link,
+			Network:  network,
+		}, nil
+	} else {
+		link, err := contractDeployer.DeployLinkTokenContract(wallets.Default())
+		if err != nil {
+			return NetworkInfo{}, err
+		}
+		return NetworkInfo{
+			Client:   bcc,
+			Wallets:  wallets,
+			Deployer: contractDeployer,
+			Link:     link,
+			Network:  network,
+		}, nil
 	}
-	return NetworkInfo{
-		Client:   bcc,
-		Wallets:  wallets,
-		Deployer: contractDeployer,
-		Link:     link,
-		Network:  network,
-	}, nil
 }
 
 // SuiteSetup enables common use cases, and safe handling of different blockchain networks for test scenarios
