@@ -10,10 +10,15 @@ spec:
       - name: node-secrets-volume
         secret:
           secretName: {{ .Manifest.Secret.ObjectMeta.Name }}
+      - name: chainlink-configmap-volume
+        configMap:
+          name: chainlink-3-config-map
+          defaultMode: 0777
       containers:
       - name: node-{{ .Values.chainlinkCluster.chainlink.idx }}
         image: {{ .Config.Apps.Chainlink.Image }}:{{ .Config.Apps.Chainlink.Version }}
         imagePullPolicy: IfNotPresent
+        command: ["/home/root/clroot/init.sh"]
         args:
         - node
         - start
@@ -38,6 +43,12 @@ spec:
           value: {{ .DefaultNetwork.ClusterURL }}
         - name: ETH_CHAIN_ID
           value: {{ .DefaultNetwork.ChainID }}
+        {{ if or (eq .DefaultNetwork.ChainID 31) (eq .DefaultNetwork.ChainID 33) }}
+        - name: ETH_GAS_PRICE_DEFAULT
+          value: "65000000"
+        - name: ETH_MIN_GAS_PRICE_WEI
+          value: "65000000"
+        {{ end }}
         - name: ALLOW_ORIGINS
           value: '*'
         - name: CHAINLINK_DEV
@@ -103,6 +114,12 @@ spec:
         - name: node-secrets-volume
           readonly: false
           mountPath: /etc/node-secrets-volume/
+        - name: chainlink-configmap-volume
+          mountPath: /home/root/clroot/init.sh
+          subPath: init.sh
+        - name: chainlink-configmap-volume
+          mountPath: /home/root/clroot/keystore.json
+          subPath: keystore.json
         livenessProbe:
           httpGet:
             path: /

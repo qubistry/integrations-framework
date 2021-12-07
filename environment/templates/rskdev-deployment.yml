@@ -1,0 +1,34 @@
+metadata:
+  name: rskdev-network
+spec:
+  template:
+    metadata:
+      labels:
+        app: rskdev-network
+    spec:
+      containers:
+      - name: rskdev-network
+        image: qubistry/rskj:latest
+        entrypoint: java
+        args:
+          - -Xss4M
+          - -Dlogback.configurationFile='/home/rskj/logback.xml'
+          - -Drsk.conf.file=/home/rskj/regtest.conf
+          - -Drpc.skipRemasc=true
+          - -Drpc.providers.web.ws.port={{ .Network.RPCPort }}
+          - -cp
+          - /home/rskj/rskj-core/build/libs/rskj-core-3.2.0-SNAPSHOT-all.jar
+          - co.rsk.Start
+        ports:
+        - containerPort: {{ .Network.RPCPort }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Network.RPCPort }}
+          periodSeconds: 2
+        resources:
+          requests:
+            memory: {{ .Config.Apps.Geth.Requests.Memory }}
+            cpu: {{ .Config.Apps.Geth.Requests.Cpu }}
+          limits:
+            memory: {{ .Config.Apps.Geth.Limits.Memory }}
+            cpu: {{ .Config.Apps.Geth.Limits.Cpu }}

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chainlink-4-config-map
+data:
+  init.sh: |
+    #!/bin/bash
+    chainlink local import /home/root/clroot/keystore.json
+    echo "...done!"
+
+    chainlink "$@"
+  keystore.json: |
+    {"address":"6d74797d12aaa320a00a0395637f5f2096aaed48","crypto":{"cipher":"aes-128-ctr","ciphertext":"c0ace215dd560a35f0709b0ecdcff9a0e1ee385b036db8477630891673663f19","cipherparams":{"iv":"6667c5c08b7cc0f029a470380a6add43"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"3faf505f28cb1d5c0bf77f0cadb7b17ff800a9c48364999dafae629b88cdac03"},"mac":"7f7cc36c1399ddd542082f49a014fa97a7c9bb6b60f74fec5fab0dba44f52d33"},"id":"77baf782-9528-405c-b454-8bde5bd3346d","version":3}

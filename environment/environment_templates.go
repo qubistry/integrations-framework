@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/smartcontractkit/integrations-framework/utils"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/smartcontractkit/integrations-framework/utils"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -38,6 +39,7 @@ const (
 	GethRPCPort       uint16 = 8546
 	GanacheRPCPort    uint16 = 8547
 	MinersRPCPort     uint16 = 9545
+	RSKRPCPort        uint16 = 4445
 )
 
 var (
@@ -121,8 +123,9 @@ func NewHeadlessChainlinkManifest(idx int) *K8sManifest {
 func NewChainlinkManifest(idx int) *K8sManifest {
 	return &K8sManifest{
 		id:             "chainlink",
-		DeploymentFile: filepath.Join(utils.ProjectRoot, "/environment/templates/chainlink/chainlink-deployment.yml"),
+		DeploymentFile: filepath.Join(utils.ProjectRoot, fmt.Sprintf("/environment/templates/chainlink/chainlink-deployment%d.yml", idx)),
 		ServiceFile:    filepath.Join(utils.ProjectRoot, "/environment/templates/chainlink/chainlink-service.yml"),
+		ConfigMapFile:  filepath.Join(utils.ProjectRoot, fmt.Sprintf("/environment/templates/chainlink/chainlink-config-map%d.yml", idx)),
 
 		values: map[string]interface{}{
 			"idx":                         idx,
@@ -396,6 +399,32 @@ func NewGanacheManifest(networkCount int, network *config.NetworkConfig) *K8sMan
 				manifest.Service.Spec.Ports[0].Port,
 			)
 			network.LocalURL = fmt.Sprintf("ws://127.0.0.1:%d", manifest.ports[0].Local)
+			manifest.values["clusterURL"] = network.ClusterURL
+			manifest.values["localURL"] = network.LocalURL
+			return nil
+		},
+	}
+}
+
+func NewRskDevManifest(networkCount int, network *config.NetworkConfig) *K8sManifest {
+	network.Name = fmt.Sprintf("rsk-regtest-%d", networkCount)
+	network.RPCPort = GetFreePort()
+	return &K8sManifest{
+		id:             network.Name,
+		DeploymentFile: filepath.Join(utils.ProjectRoot, "/environment/templates/rskdev-deployment.yml"),
+		ServiceFile:    filepath.Join(utils.ProjectRoot, "/environment/templates/rskdev-service.yml"),
+		Network:        network,
+		values: map[string]interface{}{
+			"rpcPort": network.RPCPort,
+		},
+
+		SetValuesFunc: func(manifest *K8sManifest) error {
+			network.ClusterURL = fmt.Sprintf(
+				"ws://%s:%d/websocket",
+				manifest.Service.Spec.ClusterIP,
+				manifest.Service.Spec.Ports[0].Port,
+			)
+			network.LocalURL = fmt.Sprintf("ws://127.0.0.1:%d/websocket", manifest.ports[0].Local)
 			manifest.values["clusterURL"] = network.ClusterURL
 			manifest.values["localURL"] = network.LocalURL
 			return nil
@@ -700,6 +729,7 @@ func addNetworkManifestToDependencyGroup(chainlinkGroup *K8sManifestGroup, depen
 			"Ethereum Geth":    0,
 			"Ethereum Hardhat": 0,
 			"Ethereum Ganache": 0,
+			"RSK RegTest":      0,
 		}
 		for _, network := range networks {
 			switch network.Config().Name {
@@ -723,6 +753,10 @@ func addNetworkManifestToDependencyGroup(chainlinkGroup *K8sManifestGroup, depen
 					dependencyGroups[indexOfLastElementInDependencyGroups].manifests,
 					NewGanacheManifest(networkCounts[network.Config().Name], network.Config()))
 				networkCounts[network.Config().Name] += 1
+			case "RSK RegTest":
+				dependencyGroups[indexOfLastElementInDependencyGroups].manifests = append(
+					dependencyGroups[indexOfLastElementInDependencyGroups].manifests,
+					NewRskDevManifest(networkCounts[network.Config().Name], network.Config()))
 			default:
 				network.SetClusterURL(network.URLs()[0])
 				network.SetLocalURL(network.URLs()[0])

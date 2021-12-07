@@ -1,0 +1,10 @@
+metadata:
+  name: rskdev-network
+spec:
+  ports:
+  - name: access
+    port: {{ .Network.RPCPort }}
+    targetPort: {{ .Network.RPCPort }}
+  selector:
+    app: rskdev-network
+  type: ClusterIP
