@@ -2,13 +2,14 @@ package environment
 
 import (
 	"fmt"
+	"net/http"
+	"net/url"
+
 	"github.com/rs/zerolog/log"
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/client/chaos"
 	"github.com/smartcontractkit/integrations-framework/config"
 	"github.com/smartcontractkit/integrations-framework/hooks"
-	"net/http"
-	"net/url"
 )
 
 // Environment is the interface that represents a deployed environment, whether locally or on remote machines
@@ -114,7 +115,11 @@ func NewExternalBlockchainClient(clientFunc hooks.NewClientHook, env Environment
 	if err == nil {
 		var url string
 		if network.WSEnabled() {
-			url = fmt.Sprintf("ws://%s", sd.LocalURL.Host)
+			if network.ChainID().String() == "33" {
+				url = fmt.Sprintf("ws://%s/websocket", sd.LocalURL.Host)
+			} else {
+				url = fmt.Sprintf("ws://%s", sd.LocalURL.Host)
+			}
 		} else {
 			url = fmt.Sprintf("http://%s", sd.LocalURL.Host)
 		}
