@@ -825,6 +825,7 @@ func (o *RunlogRoundConfirmer) Wait() error {
 type OffchainAggregatorRoundConfirmer struct {
 	ocrInstance OffchainAggregator
 	roundID     *big.Int
+	done        bool
 	doneChan    chan struct{}
 	context     context.Context
 	cancel      context.CancelFunc
@@ -840,6 +841,7 @@ func NewOffchainAggregatorRoundConfirmer(
 	return &OffchainAggregatorRoundConfirmer{
 		ocrInstance: contract,
 		roundID:     roundID,
+		done:        false,
 		doneChan:    make(chan struct{}),
 		context:     ctx,
 		cancel:      ctxCancel,
@@ -858,8 +860,11 @@ func (o *OffchainAggregatorRoundConfirmer) ReceiveBlock(_ client.NodeBlock) erro
 		Int64("Current Round", currRound.Int64()).
 		Int64("Waiting for Round", o.roundID.Int64())
 	if currRound.Cmp(o.roundID) >= 0 {
-		ocrLog.Msg("OCR round completed")
-		o.doneChan <- struct{}{}
+		if !o.done {
+			ocrLog.Msg("OCR round completed")
+			o.done = true
+			o.doneChan <- struct{}{}
+		}
 	} else {
 		ocrLog.Msg("Waiting for OCR round")
 	}
