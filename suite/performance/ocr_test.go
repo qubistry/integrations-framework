@@ -1,10 +1,11 @@
 package performance
 
 import (
-	"github.com/smartcontractkit/integrations-framework/hooks"
-	"github.com/smartcontractkit/integrations-framework/utils"
 	"math/big"
 	"time"
+
+	"github.com/smartcontractkit/integrations-framework/hooks"
+	"github.com/smartcontractkit/integrations-framework/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -27,7 +28,7 @@ var _ = Describe("OCR soak test @soak-ocr", func() {
 		By("Deploying the environment", func() {
 			suiteSetup, err = actions.SingleNetworkSetup(
 				environment.NewChainlinkCluster(5),
-				hooks.EthereumPerfNetworkHook,
+				hooks.RskTestNetworkHook,
 				hooks.EthereumDeployerHook,
 				hooks.EthereumClientHook,
 				utils.ProjectRoot,
@@ -37,7 +38,7 @@ var _ = Describe("OCR soak test @soak-ocr", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			networkInfo = suiteSetup.DefaultNetwork()
 
-			networkInfo.Client.ParallelTransactions(true)
+			networkInfo.Client.ParallelTransactions(false)
 		})
 
 		By("Funding the Chainlink nodes", func() {
@@ -45,8 +46,8 @@ var _ = Describe("OCR soak test @soak-ocr", func() {
 				nodes,
 				networkInfo.Client,
 				networkInfo.Wallets.Default(),
-				big.NewFloat(10),
-				big.NewFloat(10),
+				big.NewFloat(0),
+				big.NewFloat(0),
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -55,11 +56,11 @@ var _ = Describe("OCR soak test @soak-ocr", func() {
 			perfTest = NewOCRTest(
 				OCRTestOptions{
 					TestOptions: TestOptions{
-						NumberOfContracts: 5,
+						NumberOfContracts: 1,
 					},
-					RoundTimeout: 180 * time.Second,
+					RoundTimeout: 360 * time.Second,
 					AdapterValue: 5,
-					TestDuration: 10 * time.Minute,
+					TestDuration: 10080 * time.Minute,
 				},
 				contracts.DefaultOffChainAggregatorOptions(),
 				suiteSetup.Environment(),

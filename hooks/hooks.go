@@ -3,6 +3,7 @@ package hooks
 import (
 	"errors"
 	"fmt"
+
 	"github.com/smartcontractkit/integrations-framework/client"
 	"github.com/smartcontractkit/integrations-framework/config"
 	"github.com/smartcontractkit/integrations-framework/contracts"
@@ -61,4 +62,8 @@ func NetworksFromConfigHook(config *config.Config) ([]client.BlockchainNetwork, 
 // EthereumPerfNetworkHook perf network func
 func EthereumPerfNetworkHook(config *config.Config) (client.BlockchainNetwork, error) {
 	return client.NewEthereumNetwork("ethereum_geth_performance", config.NetworkConfigs["ethereum_geth_performance"])
+}
+
+func RskTestNetworkHook(config *config.Config) (client.BlockchainNetwork, error) {
+	return client.NewEthereumNetwork("rsk_testnet", config.NetworkConfigs["rsk_testnet"])
 }
