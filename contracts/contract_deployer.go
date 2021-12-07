@@ -61,6 +61,7 @@ type ContractDeployer interface {
 	DeployVRFConsumer(fromWallet client.BlockchainWallet, linkAddr string, coordinatorAddr string) (VRFConsumer, error)
 	DeployVRFCoordinator(fromWallet client.BlockchainWallet, linkAddr string, bhsAddr string) (VRFCoordinator, error)
 	DeployBlockhashStore(fromWallet client.BlockchainWallet) (BlockHashStore, error)
+	InstanceLinkTokenContract(fromWallet client.BlockchainWallet, address common.Address) (LinkToken, error)
 }
 
 // NewContractDeployer returns an instance of a contract deployer based on the client type
@@ -211,6 +212,17 @@ func (e *EthereumContractDeployer) DeployFluxAggregatorContract(
 	}, nil
 }
 
+// InstanceLinkTokenContract instances an existing Link Token contract
+func (e *EthereumContractDeployer) InstanceLinkTokenContract(fromWallet client.BlockchainWallet, address common.Address) (LinkToken, error) {
+	linkTokenInstance, err := ethereum.NewLinkToken(address, e.eth.Client)
+	return &EthereumLinkToken{
+		client:       e.eth,
+		linkToken:    linkTokenInstance,
+		callerWallet: fromWallet,
+		address:      address,
+	}, err
+}
+
 // DeployLinkTokenContract deploys a Link Token contract to an EVM chain
 func (e *EthereumContractDeployer) DeployLinkTokenContract(fromWallet client.BlockchainWallet) (LinkToken, error) {
 	linkTokenAddress, _, instance, err := e.eth.DeployContract(fromWallet, "LINK Token", func(
@@ -264,7 +276,7 @@ func DefaultOffChainAggregatorConfig(numberNodes int) OffChainAggregatorConfig {
 		DeltaC:           time.Minute * 10,
 		DeltaGrace:       time.Second,
 		DeltaProgress:    time.Second * 30,
-		DeltaStage:       time.Second * 10,
+		DeltaStage:       time.Second * 60,
 		DeltaResend:      time.Second * 10,
 		DeltaRound:       time.Second * 20,
 		RMax:             4,
