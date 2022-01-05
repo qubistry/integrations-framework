@@ -1,0 +1,10 @@
+metadata:
+  name: external-adapter
+spec:
+  ports:
+  - name: "8194"
+    port: 8194
+    targetPort: 8194
+  selector:
+    app: external-adapter
+  type: ClusterIP

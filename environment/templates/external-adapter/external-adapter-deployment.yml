@@ -1,0 +1,29 @@
+metadata:
+  name: external-adapter
+spec:
+  template:
+    metadata:
+      labels:
+        app: external-adapter
+    spec:
+      containers:
+      - name: external-adapter
+        image: qubistry/cryptocompare-adapter:latest
+        env:
+            - name: EA_PORT
+              value: 8194
+            - name: API_KEY
+              value: "<API_KEY_HERE>"
+        ports:
+        - containerPort: 8194
+        readinessProbe:
+          tcpSocket:
+            port: 8194
+          periodSeconds: 2
+        resources:
+          requests:
+              memory: 256Mi
+              cpu: 500m
+          limits:
+              memory: 512Mi
+              cpu: 850m

@@ -25,6 +25,13 @@ type OCRTestOptions struct {
 	RoundTimeout time.Duration
 	AdapterValue int
 	TestDuration time.Duration
+	ExternalAdapterOptions
+}
+
+type ExternalAdapterOptions struct {
+	Name string
+	From string
+	To   string
 }
 
 // OCRTest is the implementation of Test that will configure and execute soak test
@@ -41,6 +48,7 @@ type OCRTest struct {
 	nodeAddresses     []common.Address
 	contractInstances []contracts.OffchainAggregator
 	mockserver        *client.MockserverClient
+	externalAdapter   *client.ExternalAdapter
 
 	jobMap OCRJobMap
 }
@@ -84,6 +92,13 @@ func (f *OCRTest) Setup() error {
 	mockserver, err := environment.GetMockserverClientFromEnv(f.Environment)
 	if err != nil {
 		return err
+	}
+	if f.TestOptions.AdapterValue == -1 {
+		externalAdapter, err := environment.GetExternalAdapterFromEnv(f.Environment, f.Environment.Networks()[0].Config())
+		if err != nil {
+			return err
+		}
+		f.externalAdapter = externalAdapter
 	}
 	f.chainlinkClients = chainlinkClients
 	f.nodeAddresses = nodeAddresses
@@ -213,9 +228,21 @@ func (f *OCRTest) createChainlinkJobs() error {
 
 	bridgeAttrs := make([]client.BridgeTypeAttributes, 0)
 	for _, n := range f.chainlinkClients {
-		bta := client.BridgeTypeAttributes{
-			Name: "variable",
-			URL:  fmt.Sprintf("%s/variable", f.mockserver.Config.ClusterURL),
+		var bta client.BridgeTypeAttributes
+		if f.TestOptions.AdapterValue == -1 {
+			bta = client.BridgeTypeAttributes{
+				Name: f.TestOptions.ExternalAdapterOptions.Name,
+				URL:  fmt.Sprintf("%s", f.externalAdapter.Config.ClusterURL),
+				RequestData: fmt.Sprintf(
+					"{ \\\\\"data\\\\\": { \\\\\"from\\\\\": \\\\\"%s\\\\\", \\\\\"to\\\\\": \\\\\"%s\\\\\" }}",
+					f.TestOptions.ExternalAdapterOptions.From,
+					f.TestOptions.ExternalAdapterOptions.To),
+			}
+		} else {
+			bta = client.BridgeTypeAttributes{
+				Name: "variable",
+				URL:  fmt.Sprintf("%s/variable", f.mockserver.Config.ClusterURL),
+			}
 		}
 		bridgeAttrs = append(bridgeAttrs, bta)
 		if err := n.CreateBridge(&bta); err != nil {

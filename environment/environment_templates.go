@@ -24,12 +24,13 @@ import (
 
 // Ports for common services
 const (
-	ChainlinkWebPort  uint16 = 6688
-	ChainlinkP2PPort  uint16 = 6690
-	ExplorerAPIPort   uint16 = 8080
-	PrometheusAPIPort uint16 = 9090
-	MockserverAPIPort uint16 = 1080
-	KafkaRestAPIPort  uint16 = 8082
+	ChainlinkWebPort       uint16 = 6688
+	ChainlinkP2PPort       uint16 = 6690
+	ExplorerAPIPort        uint16 = 8080
+	ExternalAdapterAPIPort uint16 = 8194
+	PrometheusAPIPort      uint16 = 9090
+	MockserverAPIPort      uint16 = 1080
+	KafkaRestAPIPort       uint16 = 8082
 )
 
 // Ethereum ports
@@ -206,6 +207,22 @@ func NewExplorerManifest(nodeCount int) *K8sManifest {
 				keys.Values = append(keys.Values, credentials)
 			}
 			manifest.values["keys"] = &keys
+			return nil
+		},
+	}
+}
+
+func NewExternalAdapterManifest() *K8sManifest {
+	return &K8sManifest{
+		id:             "externaladapter",
+		DeploymentFile: filepath.Join(utils.ProjectRoot, "/environment/templates/external-adapter/external-adapter-deployment.yml"),
+		ServiceFile:    filepath.Join(utils.ProjectRoot, "/environment/templates/external-adapter/external-adapter-service.yml"),
+		SetValuesFunc: func(manifest *K8sManifest) error {
+			manifest.values["clusterURL"] = fmt.Sprintf(
+				"%s:%d",
+				manifest.Service.Spec.ClusterIP,
+				manifest.Service.Spec.Ports[0].Port,
+			)
 			return nil
 		},
 	}
@@ -411,8 +428,8 @@ func NewRskDevManifest(networkCount int, network *config.NetworkConfig) *K8sMani
 	network.RPCPort = GetFreePort()
 	return &K8sManifest{
 		id:             network.Name,
-		DeploymentFile: filepath.Join(utils.ProjectRoot, "/environment/templates/rskdev-deployment.yml"),
-		ServiceFile:    filepath.Join(utils.ProjectRoot, "/environment/templates/rskdev-service.yml"),
+		DeploymentFile: filepath.Join(utils.ProjectRoot, "/environment/templates/rskdev/rskdev-deployment.yml"),
+		ServiceFile:    filepath.Join(utils.ProjectRoot, "/environment/templates/rskdev/rskdev-service.yml"),
 		Network:        network,
 		values: map[string]interface{}{
 			"rpcPort": network.RPCPort,
@@ -490,10 +507,27 @@ func NewKafkaRestManifest() *K8sManifest {
 }
 
 // NewChainlinkCluster is a basic environment that deploys hardhat with a chainlink cluster and an external adapter
-func NewChainlinkCluster(nodeCount int) K8sEnvSpecInit {
+func NewChainlinkCluster(params ...int) K8sEnvSpecInit {
+	nodeCount := params[0]
+	var (
+		usesExternalAdapter            bool
+		externalAdapterDependencyGroup *K8sManifestGroup
+		dependencyGroups               []*K8sManifestGroup
+	)
+	if len(params) > 1 {
+		if params[1] != 0 {
+			usesExternalAdapter = true
+		}
+	}
 	mockserverDependencyGroup := &K8sManifestGroup{
 		id:        "MockserverDependencyGroup",
 		manifests: []K8sEnvResource{NewMockserverHelmChart()},
+	}
+	if usesExternalAdapter {
+		externalAdapterDependencyGroup = &K8sManifestGroup{
+			id:        "ExternalAdapterDependencyGroup",
+			manifests: []K8sEnvResource{NewExternalAdapterManifest()},
+		}
 	}
 
 	chainlinkGroup := &K8sManifestGroup{
@@ -508,7 +542,11 @@ func NewChainlinkCluster(nodeCount int) K8sEnvSpecInit {
 
 	dependencyGroup := getBasicDependencyGroup()
 	addPostgresDbsToDependencyGroup(dependencyGroup, nodeCount)
-	dependencyGroups := []*K8sManifestGroup{mockserverDependencyGroup, dependencyGroup}
+	if usesExternalAdapter {
+		dependencyGroups = []*K8sManifestGroup{mockserverDependencyGroup, externalAdapterDependencyGroup, dependencyGroup}
+	} else {
+		dependencyGroups = []*K8sManifestGroup{mockserverDependencyGroup, dependencyGroup}
+	}
 	return addNetworkManifestToDependencyGroup(chainlinkGroup, dependencyGroups)
 }
 

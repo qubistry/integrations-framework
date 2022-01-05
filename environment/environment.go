@@ -54,6 +54,18 @@ func GetExplorerClientFromEnv(env Environment) (*client.ExplorerClient, error) {
 	return NewExplorerClient(sd.LocalURL.String())
 }
 
+// GetExternalAdapterFromEnv returns an external adapter
+func GetExternalAdapterFromEnv(env Environment, network *config.NetworkConfig) (*client.ExternalAdapter, error) {
+	sd, err := env.GetServiceDetails(ExternalAdapterAPIPort)
+	if err != nil {
+		return nil, err
+	}
+	return client.NewExternalAdapter(&client.ExternalAdapterConfig{
+		LocalURL:   sd.LocalURL.String(),
+		ClusterURL: sd.RemoteURL.String(),
+	}), nil
+}
+
 // GetPrometheusClientFromEnv returns a Prometheus client
 func GetPrometheusClientFromEnv(env Environment) (*client.Prometheus, error) {
 	sd, err := env.GetServiceDetails(PrometheusAPIPort)

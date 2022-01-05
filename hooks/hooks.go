@@ -67,3 +67,7 @@ func EthereumPerfNetworkHook(config *config.Config) (client.BlockchainNetwork, e
 func RskTestNetworkHook(config *config.Config) (client.BlockchainNetwork, error) {
 	return client.NewEthereumNetwork("rsk_testnet", config.NetworkConfigs["rsk_testnet"])
 }
+
+func RskRegTestNetworkHook(config *config.Config) (client.BlockchainNetwork, error) {
+	return client.NewEthereumNetwork("rsk_regtest", config.NetworkConfigs["rsk_regtest"])
+}
