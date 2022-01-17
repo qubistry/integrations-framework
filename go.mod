@@ -20,10 +20,10 @@ require (
 	github.com/smartcontractkit/libocr v0.0.0-20210826183649-d12971936c12
 	github.com/spf13/viper v1.9.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	helm.sh/helm/v3 v3.7.1
-	k8s.io/api v0.22.3
-	k8s.io/apimachinery v0.22.3
-	k8s.io/client-go v0.22.3
+	helm.sh/helm/v3 v3.7.2
+	k8s.io/api v0.22.4
+	k8s.io/apimachinery v0.22.4
+	k8s.io/client-go v0.22.4
 )
 
 require (
@@ -33,7 +33,7 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.1.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.2 // indirect
-	github.com/Masterminds/squirrel v1.5.1 // indirect
+	github.com/Masterminds/squirrel v1.5.2 // indirect
 	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/Microsoft/hcsshim v0.9.0 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
@@ -159,13 +159,13 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/apiextensions-apiserver v0.22.3 // indirect
-	k8s.io/apiserver v0.22.3 // indirect
-	k8s.io/cli-runtime v0.22.3 // indirect
-	k8s.io/component-base v0.22.3 // indirect
+	k8s.io/apiextensions-apiserver v0.22.4 // indirect
+	k8s.io/apiserver v0.22.4 // indirect
+	k8s.io/cli-runtime v0.22.4 // indirect
+	k8s.io/component-base v0.22.4 // indirect
 	k8s.io/klog/v2 v2.30.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20211105084753-ee342a809c29 // indirect
-	k8s.io/kubectl v0.22.3 // indirect
+	k8s.io/kube-openapi v0.0.0-20211109043538-20434351676c // indirect
+	k8s.io/kubectl v0.22.4 // indirect
 	k8s.io/utils v0.0.0-20210930125809-cb0fa318a74b // indirect
 	// HELM Requires this old oras version, ticket to update https://github.com/helm/helm/issues/10263
 	oras.land/oras-go v0.4.0 // indirect
