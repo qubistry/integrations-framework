@@ -660,6 +660,15 @@ func ObservationSourceSpecBridge(bta BridgeTypeAttributes) string {
 		fetch -> parse;`, bta.Name, bta.RequestData)
 }
 
+// ObservationSourceSpecBridge creates a bridge task spec for json data
+func ObservationSourceSpecBridgeMultiply(bta BridgeTypeAttributes, multiply string) string {
+	return fmt.Sprintf(`
+		fetch [type=bridge name="%s" requestData="%s"];
+		parse [type=jsonparse path="data,result"];
+		multiply [type="multiply" times=%s]
+		fetch -> parse -> multiply;`, bta.Name, bta.RequestData, multiply)
+}
+
 // marshallTemplate Helper to marshall templates
 func marshallTemplate(jobSpec interface{}, name, templateString string) (string, error) {
 	var buf bytes.Buffer

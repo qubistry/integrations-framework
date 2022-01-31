@@ -127,6 +127,10 @@ func (f *FluxTest) Run() error {
 	return g.Wait()
 }
 
+func (f *FluxTest) SingleRun() error {
+	return nil
+}
+
 // RecordValues will query all of the latencies of the FluxAggregator rounds and then record them within the
 // test runner
 func (f *FluxTest) RecordValues(b ginkgo.Benchmarker) error {

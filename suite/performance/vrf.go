@@ -260,6 +260,10 @@ func (f *VRFTest) RecordValues(b ginkgo.Benchmarker) error {
 	return f.testResults.calculateLatencies(b)
 }
 
+func (f *VRFTest) SingleRun() error {
+	return nil
+}
+
 // createChainlinkJobs create and collect VRF jobs for every Chainlink node
 func (f *VRFTest) createChainlinkJobs() error {
 	jobsChan := make(chan ContractsNodesJobsMap, len(f.chainlinkClients)*len(f.contractInstances))

@@ -19,6 +19,7 @@ type Test interface {
 	Setup() error
 	Run() error
 	RecordValues(b ginkgo.Benchmarker) error
+	SingleRun() error
 }
 
 // TestOptions common perf/soak test options

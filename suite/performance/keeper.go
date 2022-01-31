@@ -288,6 +288,10 @@ func (f *KeeperTest) Run() error {
 	}
 }
 
+func (f *KeeperTest) SingleRun() error {
+	return nil
+}
+
 // waitForUpkeeps await that every consumer upkeep was called and counter inside contract is incremented for that round
 func (f *KeeperTest) waitForUpkeeps(upkeeps int) error {
 	for _, consumer := range f.contractInstances {

@@ -210,6 +210,10 @@ func (f *RunlogTest) Run() error {
 	}
 }
 
+func (f *RunlogTest) SingleRun() error {
+	return nil
+}
+
 func (f *RunlogTest) watchPerfEvents() context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {

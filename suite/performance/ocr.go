@@ -26,6 +26,8 @@ type OCRTestOptions struct {
 	AdapterValue int
 	TestDuration time.Duration
 	ExternalAdapterOptions
+	UseExistingBridge bool
+	AddMultiplyTask   string
 }
 
 type ExternalAdapterOptions struct {
@@ -192,6 +194,13 @@ func (f *OCRTest) Run() error {
 	}
 }
 
+func (f *OCRTest) SingleRun() error {
+	if err := f.createChainlinkJobs(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (f *OCRTest) waitRoundEnd(roundID int) error {
 	for _, ci := range f.contractInstances {
 		ocrRound := contracts.NewOffchainAggregatorRoundConfirmer(ci, big.NewInt(int64(roundID)), f.TestOptions.RoundTimeout)
@@ -245,8 +254,10 @@ func (f *OCRTest) createChainlinkJobs() error {
 			}
 		}
 		bridgeAttrs = append(bridgeAttrs, bta)
-		if err := n.CreateBridge(&bta); err != nil {
-			return err
+		if f.TestOptions.UseExistingBridge == false {
+			if err := n.CreateBridge(&bta); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -319,13 +330,21 @@ func (f *OCRTest) createChainlinkJobsPerContract(
 			}
 			nodeOCRKeyId := nodeOCRKeys.Data[0].ID
 
+			var obs string
+			multiply := f.TestOptions.AddMultiplyTask
+			if multiply != "" {
+				obs = client.ObservationSourceSpecBridgeMultiply(bridgesAttrs[index], multiply)
+			} else {
+				obs = client.ObservationSourceSpecBridge(bridgesAttrs[index])
+			}
+
 			ocrSpec := &client.OCRTaskJobSpec{
 				ContractAddress:    contract.Address(),
 				P2PPeerID:          nodeP2PId,
 				P2PBootstrapPeers:  []client.Chainlink{bootstrapNode},
 				KeyBundleID:        nodeOCRKeyId,
 				TransmitterAddress: nodeTransmitterAddress,
-				ObservationSource:  client.ObservationSourceSpecBridge(bridgesAttrs[index]),
+				ObservationSource:  obs,
 			}
 			jobID, err := f.chainlinkClients[index].CreateJob(ocrSpec)
 			if err != nil {
