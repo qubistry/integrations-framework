@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/smartcontractkit/integrations-framework/client/chaos"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -16,6 +15,8 @@ import (
 	"sync"
 	"text/template"
 	"time"
+
+	"github.com/smartcontractkit/integrations-framework/client/chaos"
 
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
@@ -60,6 +61,7 @@ type K8sEnvResource interface {
 	GetConfig() *config.Config
 	Environment() *K8sEnvironment
 	SetEnvironment(environment *K8sEnvironment) error
+	Configure(values map[string]interface{}) error
 	Deploy(values map[string]interface{}) error
 	WaitUntilHealthy() error
 	ServiceDetails() ([]*ServiceDetails, error)
@@ -123,9 +125,17 @@ func NewK8sEnvironment(
 		}
 	}
 
-	namespace, err := env.createNamespace(determineNamespace(networks))
-	if err != nil {
-		return nil, err
+	var namespace *coreV1.Namespace
+	if cfg.UseNamespace != "" {
+		namespace, err = env.loadNamespace(cfg.UseNamespace)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		namespace, err = env.createNamespace(determineNamespace(networks))
+		if err != nil {
+			return nil, err
+		}
 	}
 	env.namespace = namespace
 
@@ -139,6 +149,55 @@ func NewK8sEnvironment(
 	env.chaos = cc
 
 	return env, nil
+}
+
+func (env *K8sEnvironment) ConfigureSpecs(init K8sEnvSpecInit) error {
+	resources := init(env.networks...)
+	specsLen := len(env.specs)
+	env.specs = append(env.specs, resources...)
+
+	ctx, ctxCancel := context.WithTimeout(context.Background(), env.config.Kubernetes.DeploymentTimeout)
+	defer ctxCancel()
+
+	errChan := make(chan error)
+	go env.configureSpecs(specsLen, errChan)
+
+	var err error = nil
+configurationLoop:
+	for {
+		select {
+		case err, open := <-errChan:
+			if err != nil {
+				return err
+			} else if !open {
+				break configurationLoop
+			}
+		case <-ctx.Done():
+			return fmt.Errorf("error while waiting for spec configuration: %v", ctx.Err())
+		}
+	}
+
+	return err
+}
+
+func (env *K8sEnvironment) configureSpecs(startIndex int, errChan chan<- error) {
+	for i := startIndex; i < len(env.specs); i++ {
+		spec := env.specs[i]
+		if err := spec.SetEnvironment(env); err != nil {
+			errChan <- err
+			return
+		}
+		env.allDeploysValues[spec.ID()] = spec.Values()
+		if err := spec.Configure(env.allDeploysValues); err != nil {
+			errChan <- err
+			return
+		}
+		if err := spec.WaitUntilHealthy(); err != nil {
+			errChan <- err
+			return
+		}
+	}
+	close(errChan)
 }
 
 // DeploySpecs deploys all specs in the provided environment init function
@@ -444,6 +503,14 @@ func determineNamespace(networks []client.BlockchainNetwork) string {
 	return name
 }
 
+func (env *K8sEnvironment) loadNamespace(namespace string) (*coreV1.Namespace, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+
+	loadedNamespace, err := env.k8sClient.CoreV1().Namespaces().Get(ctx, namespace, metaV1.GetOptions{})
+	return loadedNamespace, err
+}
+
 type k8sTemplateData struct {
 	Config  *config.Config
 	Network *config.NetworkConfig
@@ -512,6 +579,23 @@ func (m *K8sManifest) SetValue(key string, val interface{}) {
 // GetConfig gets the config for the manifest group
 func (m *K8sManifest) GetConfig() *config.Config {
 	return m.env.config
+}
+
+func (m *K8sManifest) Configure(values map[string]interface{}) error {
+	if len(m.ConfigMapFile) > 0 && m.ConfigMap == nil {
+		if err := m.loadConfigMap(values); err != nil {
+			return err
+		}
+	}
+	if len(m.SecretFile) > 0 && m.Secret == nil {
+		if err := m.loadSecret(values); err != nil {
+			return err
+		}
+	}
+	if err := m.loadService(values); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Deploy will create the definitions for each manifest on the k8s cluster
@@ -867,6 +951,100 @@ func (m *K8sManifest) initTemplateData(
 	}
 }
 
+func (m *K8sManifest) loadConfigMap(values map[string]interface{}) error {
+	cmi := m.env.k8sClient.CoreV1().ConfigMaps(m.env.namespace.Name)
+	if err := m.parseConfigMap(m.env.config, values); err != nil {
+		return err
+	}
+
+	if m.ConfigMap != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+		cml, _ := cmi.List(ctx, metaV1.ListOptions{})
+
+		cmf := strings.Split(m.ConfigMapFile, "/")
+		ymlFile := cmf[len(cmf)-1]
+
+		for _, i := range cml.Items {
+			cm := i
+			if strings.Contains(m.id, "chainlink") {
+				n := m.id[len(m.id)-1:]
+				if strings.Contains(ymlFile, n) {
+					ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+					defer cancel()
+					m.ConfigMap, _ = cmi.Get(ctx, cm.Name, metaV1.GetOptions{})
+					break
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (m *K8sManifest) loadSecret(values map[string]interface{}) error {
+	k8sSecrets := m.env.k8sClient.CoreV1().Secrets(m.env.namespace.Name)
+	if err := m.parseSecret(m.env.config, values); err != nil {
+		return err
+	}
+
+	if m.Secret != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+		sl, _ := k8sSecrets.List(ctx, metaV1.ListOptions{})
+		for _, i := range sl.Items {
+			s := i
+			ldf := strings.Split(m.SecretFile, "/")
+			ymlFile := ldf[len(ldf)-1]
+			if m.id == "externaladapter" {
+				if strings.Contains(ymlFile, s.Name) {
+					ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+					defer cancel()
+					m.Secret, _ = k8sSecrets.Get(ctx, s.Name, metaV1.GetOptions{})
+					break
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (m *K8sManifest) loadService(values map[string]interface{}) error {
+	s := m.env.k8sClient.CoreV1().Services(m.env.namespace.Name)
+	if err := m.parseService(m.env.config, values); err != nil {
+		return err
+	}
+
+	if m.Service != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+		sl, _ := s.List(ctx, metaV1.ListOptions{})
+
+		ldf := strings.Split(m.ServiceFile, "/")
+		ymlFile := ldf[len(ldf)-1]
+
+		for _, i := range sl.Items {
+			sv := i
+			if m.id == "externaladapter" && strings.Contains(ymlFile, sv.Name) {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+				defer cancel()
+				m.Service, _ = s.Get(ctx, sv.Name, metaV1.GetOptions{})
+				break
+			} else if strings.Contains(m.id, "chainlink") && strings.Contains(ymlFile, "chainlink") {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+				defer cancel()
+				m.Service, _ = s.Get(ctx, sv.Name, metaV1.GetOptions{})
+				break
+			} else if m.id == "postgres" && strings.Contains(ymlFile, m.id) {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+				defer cancel()
+				m.Service, _ = s.Get(ctx, sv.Name, metaV1.GetOptions{})
+				break
+			}
+		}
+	}
+	return nil
+}
+
 func (m *K8sManifest) setLabels() error {
 	configMapName := fmt.Sprintf("%s-%s", strings.ReplaceAll(m.id, "_", "-"), "config-map")
 	if m.ConfigMap != nil {
@@ -1067,6 +1245,25 @@ func (mg *K8sManifestGroup) SetEnvironment(env *K8sEnvironment) error {
 		}
 	}
 	return nil
+}
+
+func (mg *K8sManifestGroup) Configure(values map[string]interface{}) error {
+	var errGroup error
+	wg := mg.waitGroup()
+
+	for i := 0; i < len(mg.manifests); i++ {
+		m := mg.manifests[i]
+
+		go func() {
+			defer wg.Done()
+			if err := m.Configure(values); err != nil {
+				errGroup = multierror.Append(errGroup, err)
+			}
+		}()
+	}
+
+	wg.Wait()
+	return errGroup
 }
 
 // Deploy concurrently creates all of the definitions on the k8s cluster

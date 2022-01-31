@@ -31,6 +31,7 @@ type Config struct {
 	KeepEnvironments   string                   `mapstructure:"keep_environments" yaml:"keep_environments"`
 	Prometheus         *PrometheusConfig        `mapstructure:"prometheus" yaml:"prometheus"`
 	Contracts          *ContractsConfig         `mapstructure:"contracts" yaml:"contracts"`
+	UseNamespace       string                   `mapstructure:"use_namespace" yaml:"use_namespace"`
 	DefaultKeyStore    string
 	ConfigFileLocation string
 }

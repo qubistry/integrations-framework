@@ -8,6 +8,7 @@ networks: # Selected network(s) for test execution
     - "rsk_regtest"
     - "rsk_regtest"
 keep_environments: Always # Options: Always, OnFail, Never
+use_namespace: ""
 
 apps:
     chainlink:

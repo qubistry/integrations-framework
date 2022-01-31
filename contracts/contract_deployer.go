@@ -276,7 +276,7 @@ func DefaultOffChainAggregatorConfig(numberNodes int) OffChainAggregatorConfig {
 		DeltaC:           time.Minute * 10,
 		DeltaGrace:       time.Second,
 		DeltaProgress:    time.Second * 30,
-		DeltaStage:       time.Second * 60,
+		DeltaStage:       time.Second * 70,
 		DeltaResend:      time.Second * 10,
 		DeltaRound:       time.Second * 20,
 		RMax:             4,

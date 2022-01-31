@@ -162,6 +162,10 @@ func (k *HelmChart) ServiceDetails() ([]*ServiceDetails, error) {
 	return serviceDetails, nil
 }
 
+func (k *HelmChart) Configure(_ map[string]interface{}) error {
+	return nil
+}
+
 // Deploy deploys the helm charts
 func (k *HelmChart) Deploy(_ map[string]interface{}) error {
 	log.Info().Str("Path", k.chartPath).

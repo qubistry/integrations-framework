@@ -28,6 +28,7 @@ type Environment interface {
 	TearDown()
 
 	DeploySpecs(init K8sEnvSpecInit) error
+	ConfigureSpecs(init K8sEnvSpecInit) error
 }
 
 // ServiceDetails contains all of the connectivity properties about a given deployed service

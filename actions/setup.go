@@ -123,9 +123,17 @@ func SingleNetworkSetup(
 	if err != nil {
 		return nil, err
 	}
-	err = env.DeploySpecs(initialDeployInitFunc)
-	if err != nil {
-		return nil, err
+
+	if conf.UseNamespace == "" {
+		err = env.DeploySpecs(initialDeployInitFunc)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		err = env.ConfigureSpecs(initialDeployInitFunc)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	networkInfo, err := NewNetworkInfo(network, clientFunc, deployerFunc, env)
@@ -205,9 +213,11 @@ func MultiNetworkSetup(
 		return nil, err
 	}
 
-	err = env.DeploySpecs(initialDeployInitFunc)
-	if err != nil {
-		return nil, err
+	if conf.UseNamespace == "" {
+		err = env.DeploySpecs(initialDeployInitFunc)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	allNetworks := make([]NetworkInfo, len(networks))
