@@ -287,6 +287,32 @@ func DefaultOffChainAggregatorConfig(numberNodes int) OffChainAggregatorConfig {
 	}
 }
 
+func CustomOffChainAggregatorConfig(numberNodes int, alphappb uint64, deltac time.Duration) OffChainAggregatorConfig {
+	s := []int{}
+	for i := 0; i < numberNodes; i++ {
+		s = append(s, 1)
+	}
+	if numberNodes <= 3 {
+		log.Warn().
+			Int("Number Chainlink Nodes", numberNodes).
+			Msg("You likely need more chainlink nodes to properly configure OCR, try 5 or more.")
+	}
+	return OffChainAggregatorConfig{
+		AlphaPPB:         alphappb,
+		DeltaC:           deltac,
+		DeltaGrace:       time.Second,
+		DeltaProgress:    time.Second * 30,
+		DeltaStage:       time.Second * 70,
+		DeltaResend:      time.Second * 10,
+		DeltaRound:       time.Second * 20,
+		RMax:             4,
+		S:                s,
+		N:                numberNodes,
+		F:                int(math.Max(1, float64(numberNodes/3-1))),
+		OracleIdentities: []ocrConfigHelper.OracleIdentityExtra{},
+	}
+}
+
 // DeployOffChainAggregator deploys the offchain aggregation contract to the EVM chain
 func (e *EthereumContractDeployer) DeployOffChainAggregator(
 	fromWallet client.BlockchainWallet,

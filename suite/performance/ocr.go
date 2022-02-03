@@ -26,8 +26,14 @@ type OCRTestOptions struct {
 	AdapterValue int
 	TestDuration time.Duration
 	ExternalAdapterOptions
+	*OCRConfig
 	UseExistingBridge bool
 	AddMultiplyTask   string
+}
+
+type OCRConfig struct {
+	Deviation float32
+	Heartbeat string
 }
 
 type ExternalAdapterOptions struct {
@@ -117,10 +123,23 @@ func (f *OCRTest) deployContract(c chan<- contracts.OffchainAggregator) error {
 	if err != nil {
 		return err
 	}
+
+	ocrConfig := contracts.OffChainAggregatorConfig{}
+	if f.TestOptions.OCRConfig != nil {
+		deviation := uint64(f.TestOptions.OCRConfig.Deviation * 1e7)
+		heartbeat, er := time.ParseDuration(f.TestOptions.OCRConfig.Heartbeat)
+		if er != nil {
+			return er
+		}
+		ocrConfig = contracts.CustomOffChainAggregatorConfig(len(f.chainlinkClients), deviation, heartbeat)
+	} else {
+		ocrConfig = contracts.DefaultOffChainAggregatorConfig(len(f.chainlinkClients))
+	}
+
 	if err = ocrInstance.SetConfig(
 		f.Wallets.Default(),
 		f.chainlinkClients,
-		contracts.DefaultOffChainAggregatorConfig(len(f.chainlinkClients)),
+		ocrConfig,
 	); err != nil {
 		return err
 	}
