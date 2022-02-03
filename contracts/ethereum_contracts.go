@@ -693,7 +693,13 @@ func (o *EthereumOffchainAggregator) SetConfig(
 	if err != nil {
 		return err
 	}
-	tx, err := o.ocr.SetPayees(opts, transmitters, transmitters)
+
+	var payees []common.Address
+	for x := 0; x < len(transmitters); x++ {
+		payees = append(payees, opts.From)
+	}
+
+	tx, err := o.ocr.SetPayees(opts, transmitters, payees)
 	if err != nil {
 		return err
 	}
