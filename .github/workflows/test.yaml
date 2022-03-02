@@ -22,7 +22,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout the Repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
@@ -89,7 +89,7 @@ jobs:
       CGO_ENABLED: 1
     steps:
       - name: Checkout the repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Setup go
         uses: actions/setup-go@v1
         with:
@@ -154,7 +154,7 @@ jobs:
       NETWORK: ethereum_geth_performance
     steps:
       - name: Checkout the repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Setup Go
         uses: actions/setup-go@v1
         with:
@@ -218,7 +218,7 @@ jobs:
       NETWORK: ethereum_geth_performance
     steps:
       - name: Checkout the repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Setup Go
         uses: actions/setup-go@v1
         with:
