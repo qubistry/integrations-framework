@@ -68,7 +68,7 @@ jobs:
           files: ./unit-test-coverage.out
           name: codecov-umbrella 
       - name: Publish Unit Test Results
-        uses: mikepenz/action-junit-report@v2
+        uses: mikepenz/action-junit-report@v3.0.1
         if: always()
         with:
           name: Unit Test Report
@@ -130,7 +130,7 @@ jobs:
           export PATH=$PATH:$(go env GOPATH)/bin
           make test_smoke args="-nodes=15"
       - name: Publish Test Results
-        uses: mikepenz/action-junit-report@v2
+        uses: mikepenz/action-junit-report@v3.0.1
         if: always()
         with:
           name: Smoke Test Report
@@ -195,7 +195,7 @@ jobs:
           export PATH=$PATH:$(go env GOPATH)/bin
           make test_performance args="-nodes=5"
       - name: Publish Test Results
-        uses: mikepenz/action-junit-report@v2
+        uses: mikepenz/action-junit-report@v3.0.1
         if: always()
         with:
           report_paths: '**/logs/tests-*.xml'
@@ -259,7 +259,7 @@ jobs:
           export PATH=$PATH:$(go env GOPATH)/bin
           make test_chaos args="-nodes=15"
       - name: Publish Test Results
-        uses: mikepenz/action-junit-report@v2
+        uses: mikepenz/action-junit-report@v3.0.1
         if: always()
         with:
           name: Chaos Test Report
